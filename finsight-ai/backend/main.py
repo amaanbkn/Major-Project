@@ -121,12 +121,14 @@ from routers.signals import router as signals_router
 from routers.ipo import router as ipo_router
 from routers.sip import router as sip_router
 from routers.portfolio import router as portfolio_router
+from routers.market import router as market_router
 
 app.include_router(chat_router, prefix="/api", tags=["Chat"])
 app.include_router(signals_router, prefix="/api", tags=["Signals"])
 app.include_router(ipo_router, prefix="/api", tags=["IPO"])
 app.include_router(sip_router, prefix="/api", tags=["SIP"])
 app.include_router(portfolio_router, prefix="/api", tags=["Portfolio"])
+app.include_router(market_router, prefix="/api", tags=["Market"])
 
 
 # ── Health Check ─────────────────────────────────────────────
