@@ -100,41 +100,45 @@ async def retrieve_relevant(query: str, top_k: int = 3) -> list[dict]:
     Semantic search: embed query → retrieve top-k most relevant chunks.
     Returns list of {text, metadata, distance} dicts.
     """
-    from services.gemini import get_embedding
-
-    collection = get_collection()
-
-    if collection.count() == 0:
-        logger.debug("RAG collection is empty — no documents to retrieve")
+    try:
+        from services.gemini import get_embedding
+    
+        collection = get_collection()
+    
+        if collection.count() == 0:
+            logger.debug("RAG collection is empty — no documents to retrieve")
+            return []
+    
+        # Embed the query
+        query_embedding = await get_embedding(query)
+    
+        if not query_embedding:
+            # Fallback to text-based search
+            results = collection.query(
+                query_texts=[query],
+                n_results=top_k,
+            )
+        else:
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k,
+            )
+    
+        # Format results
+        retrieved = []
+        if results and results["documents"]:
+            for i, doc in enumerate(results["documents"][0]):
+                retrieved.append({
+                    "text": doc,
+                    "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
+                    "distance": results["distances"][0][i] if results["distances"] else 0,
+                })
+    
+        logger.info(f"🔍 RAG retrieved {len(retrieved)} chunks for query")
+        return retrieved
+    except Exception as e:
+        logger.error(f"RAG retrieval error: {e}")
         return []
-
-    # Embed the query
-    query_embedding = await get_embedding(query)
-
-    if not query_embedding:
-        # Fallback to text-based search
-        results = collection.query(
-            query_texts=[query],
-            n_results=top_k,
-        )
-    else:
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-        )
-
-    # Format results
-    retrieved = []
-    if results and results["documents"]:
-        for i, doc in enumerate(results["documents"][0]):
-            retrieved.append({
-                "text": doc,
-                "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
-                "distance": results["distances"][0][i] if results["distances"] else 0,
-            })
-
-    logger.info(f"🔍 RAG retrieved {len(retrieved)} chunks for query")
-    return retrieved
 
 
 async def ingest_pdf(file_path: str, doc_id: Optional[str] = None) -> int:

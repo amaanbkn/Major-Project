@@ -1,356 +1,170 @@
-import { useState, useEffect } from 'react'
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell
-} from 'recharts'
-import {
-  TrendingUp, TrendingDown, BarChart3, Activity,
-  RefreshCw, Search, Loader2, ArrowUpRight, ArrowDownRight
-} from 'lucide-react'
-import { getNifty50, getMarketSentiment, getStockData } from '../api'
+import React, { useState } from 'react';
+import { Card } from './ui/Card';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useCountUp } from '../hooks/useCountUp';
 
-const CHART_COLORS = ['#6366f1', '#06d6a0', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6']
+const mockChartData = [
+  { time: '09:15', value: 22100 },
+  { time: '10:00', value: 22150 },
+  { time: '11:00', value: 22080 },
+  { time: '12:00', value: 22200 },
+  { time: '13:00', value: 22190 },
+  { time: '14:00', value: 22350 },
+  { time: '15:00', value: 22400 },
+  { time: '15:30', value: 22450 },
+];
 
-export default function Dashboard() {
-  const [niftyData, setNiftyData] = useState(null)
-  const [sentiment, setSentiment] = useState(null)
-  const [selectedStock, setSelectedStock] = useState('RELIANCE')
-  const [stockData, setStockData] = useState(null)
-  const [searchInput, setSearchInput] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [chartPeriod, setChartPeriod] = useState('6mo')
+const mockMovers = [
+  { name: 'RELIANCE', price: 2950.45, change24h: 2.4, change7d: 5.2 },
+  { name: 'HDFCBANK', price: 1420.10, change24h: -1.2, change7d: -2.0 },
+  { name: 'TCS', price: 4100.00, change24h: 1.8, change7d: 3.5 },
+  { name: 'INFY', price: 1650.75, change24h: -0.5, change7d: 1.1 },
+];
 
-  useEffect(() => {
-    loadDashboard()
-  }, [])
-
-  useEffect(() => {
-    loadStockChart()
-  }, [selectedStock, chartPeriod])
-
-  async function loadDashboard() {
-    setLoading(true)
-    try {
-      const [nifty, sent] = await Promise.all([
-        getNifty50().catch(() => null),
-        getMarketSentiment().catch(() => null),
-      ])
-      setNiftyData(nifty)
-      setSentiment(sent)
-    } catch (e) {
-      console.error('Dashboard load error:', e)
-    }
-    setLoading(false)
-  }
-
-  async function loadStockChart() {
-    try {
-      const data = await getStockData(selectedStock, chartPeriod)
-      setStockData(data)
-    } catch (e) {
-      console.error('Stock chart error:', e)
-    }
-  }
-
-  function handleSearch(e) {
-    e.preventDefault()
-    if (searchInput.trim()) {
-      setSelectedStock(searchInput.trim().toUpperCase())
-      setSearchInput('')
-    }
-  }
-
-  const sentimentPieData = sentiment ? [
-    { name: 'ET', value: 40, score: sentiment.sources?.economic_times?.score || 0 },
-    { name: 'MC', value: 40, score: sentiment.sources?.moneycontrol?.score || 0 },
-    { name: 'Reddit', value: 20, score: sentiment.sources?.reddit?.score || 0 },
-  ] : []
-
-  const periods = [
-    { label: '1M', value: '1mo' },
-    { label: '3M', value: '3mo' },
-    { label: '6M', value: '6mo' },
-    { label: '1Y', value: '1y' },
-    { label: '2Y', value: '2y' },
-  ]
+const StatCard = ({ label, value, change, isPositive, suffix = "", prefix = "" }) => {
+  const animatedValue = useCountUp(typeof value === 'number' ? value : 0);
+  const displayValue = typeof value === 'number' ? `${prefix}${animatedValue.toLocaleString()}${suffix}` : value;
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Market Dashboard</h1>
-          <p className="text-sm text-[var(--text-muted)]">Real-time market overview powered by yfinance</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <form onSubmit={handleSearch} className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-            <input
-              id="stock-search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search stock (e.g. TCS)"
-              className="input-field pl-10 w-48 md:w-64"
-            />
-          </form>
-          <button
-            onClick={loadDashboard}
-            className="btn-ghost p-3"
-            title="Refresh data"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* Top cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
-        {/* NIFTY 50 Index */}
-        <div className="glass-card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">NIFTY 50</span>
-            <Activity className="w-4 h-4 text-indigo-400" />
-          </div>
-          <p className="text-2xl font-bold text-[var(--text-primary)]">
-            {niftyData?.index?.value?.toLocaleString('en-IN') || '—'}
-          </p>
-          <div className="flex items-center gap-1 mt-1">
-            {(niftyData?.index?.change || 0) >= 0 ? (
-              <ArrowUpRight className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <ArrowDownRight className="w-4 h-4 text-red-400" />
-            )}
-            <span className={`text-sm font-semibold ${(niftyData?.index?.change || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {niftyData?.index?.change || 0} ({niftyData?.index?.change_pct || 0}%)
-            </span>
-          </div>
-        </div>
-
-        {/* Sentiment */}
-        <div className="glass-card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Sentiment</span>
-            <BarChart3 className="w-4 h-4 text-indigo-400" />
-          </div>
-          <p className="text-2xl font-bold text-[var(--text-primary)]">
-            {sentiment?.overall_label || '—'}
-          </p>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Score: {sentiment?.overall_score || '—'}
-          </p>
-        </div>
-
-        {/* Selected Stock */}
-        <div className="glass-card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">{selectedStock}</span>
-            <TrendingUp className="w-4 h-4 text-indigo-400" />
-          </div>
-          <p className="text-2xl font-bold text-[var(--text-primary)]">
-            ₹{stockData?.price?.price?.toLocaleString('en-IN') || '—'}
-          </p>
-          <div className="flex items-center gap-1 mt-1">
-            {(stockData?.price?.change || 0) >= 0 ? (
-              <ArrowUpRight className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <ArrowDownRight className="w-4 h-4 text-red-400" />
-            )}
-            <span className={`text-sm font-semibold ${(stockData?.price?.change || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {stockData?.price?.change || 0} ({stockData?.price?.change_pct || 0}%)
-            </span>
-          </div>
-        </div>
-
-        {/* Market Cap */}
-        <div className="glass-card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Market Cap</span>
-            <BarChart3 className="w-4 h-4 text-indigo-400" />
-          </div>
-          <p className="text-2xl font-bold text-[var(--text-primary)]">
-            {stockData?.price?.market_cap
-              ? `₹${(stockData.price.market_cap / 10000000).toFixed(0)} Cr`
-              : '—'
-            }
-          </p>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            PE: {stockData?.price?.pe_ratio?.toFixed(1) || '—'}
-          </p>
-        </div>
-      </div>
-
-      {/* Stock Chart + Sentiment Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Price Chart */}
-        <div className="lg:col-span-2 glass-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-              {selectedStock} Price Chart
-            </h3>
-            <div className="flex gap-1">
-              {periods.map(p => (
-                <button
-                  key={p.value}
-                  onClick={() => setChartPeriod(p.value)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all
-                    ${chartPeriod === p.value
-                      ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                      : 'text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-card)]'
-                    }
-                  `}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="h-[300px]">
-            {stockData?.history?.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stockData.history}>
-                  <defs>
-                    <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.08)" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fill: '#64748b', fontSize: 11 }}
-                    tickFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis tick={{ fill: '#64748b', fontSize: 11 }} domain={['auto', 'auto']} />
-                  <Tooltip
-                    contentStyle={{
-                      background: '#16163a',
-                      border: '1px solid rgba(99,102,241,0.2)',
-                      borderRadius: '8px',
-                      color: '#f1f5f9',
-                    }}
-                    formatter={(v) => [`₹${v.toFixed(2)}`, 'Close']}
-                    labelFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="close"
-                    stroke="#6366f1"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorClose)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-[var(--text-muted)]">
-                <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading chart...
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Sentiment breakdown */}
-        <div className="glass-card p-5">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Sentiment Sources</h3>
-          {sentiment ? (
-            <>
-              <div className="h-[180px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={sentimentPieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={70}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {sentimentPieData.map((entry, index) => (
-                        <Cell key={index} fill={CHART_COLORS[index]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        background: '#16163a',
-                        border: '1px solid rgba(99,102,241,0.2)',
-                        borderRadius: '8px',
-                        color: '#f1f5f9',
-                      }}
-                      formatter={(v, n, p) => [`${v}%`, p.payload.name]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-3 mt-2">
-                {sentimentPieData.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full" style={{ background: CHART_COLORS[i] }} />
-                      <span className="text-sm text-[var(--text-secondary)]">{s.name}</span>
-                    </div>
-                    <span className={`text-sm font-semibold ${s.score > 0 ? 'text-emerald-400' : s.score < 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
-                      {s.score > 0 ? '+' : ''}{s.score}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="h-[250px] flex items-center justify-center text-[var(--text-muted)]">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading...
+    <Card className="px-5 py-5 border-[#E5E7EB]">
+      <div className="flex flex-col gap-1.5 cursor-default">
+        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#6B7280]">
+          {label}
+        </span>
+        <div className="flex items-end justify-between mt-1">
+          <span className="text-[28px] font-bold tabular-nums text-[#111111] leading-none">
+            {displayValue}
+          </span>
+          {change && (
+            <div className={`flex items-center gap-0.5 px-2 py-1 rounded-[6px] ${isPositive ? 'bg-[#22C55E]/10 text-[#22C55E]' : 'bg-[#EF4444]/10 text-[#EF4444]'}`}>
+              {isPositive ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+              <span className="text-[13px] font-semibold">{Math.abs(change)}%</span>
             </div>
           )}
         </div>
       </div>
+    </Card>
+  );
+};
 
-      {/* NIFTY 50 Stock Table */}
-      <div className="glass-card p-5">
-        <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">NIFTY 50 Stocks</h3>
-        {niftyData?.stocks?.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[var(--text-muted)] border-b border-[var(--border)]">
-                  <th className="text-left py-3 px-4 font-medium">Symbol</th>
-                  <th className="text-right py-3 px-4 font-medium">Price</th>
-                  <th className="text-right py-3 px-4 font-medium">Change</th>
-                  <th className="text-right py-3 px-4 font-medium">Change %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {niftyData.stocks.map((stock, i) => (
-                  <tr
-                    key={i}
-                    className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-card)] cursor-pointer transition-colors"
-                    onClick={() => setSelectedStock(stock.symbol)}
-                  >
-                    <td className="py-3 px-4 font-medium text-[var(--text-primary)]">{stock.symbol}</td>
-                    <td className="py-3 px-4 text-right text-[var(--text-primary)]">
-                      ₹{stock.price?.toLocaleString('en-IN')}
-                    </td>
-                    <td className={`py-3 px-4 text-right font-medium ${stock.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {stock.change >= 0 ? '+' : ''}{stock.change}
-                    </td>
-                    <td className={`py-3 px-4 text-right font-medium ${stock.change_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {stock.change_pct >= 0 ? '+' : ''}{stock.change_pct}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="py-12 text-center text-[var(--text-muted)]">
-            {loading ? (
-              <><Loader2 className="w-6 h-6 animate-spin inline mr-2" /> Loading NIFTY 50 data...</>
-            ) : (
-              'No market data available. Start the backend to fetch live data.'
-            )}
-          </div>
-        )}
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[#111111] text-white px-3 py-2 rounded-[8px] shadow-lg text-sm tabular-nums flex flex-col gap-1">
+        <span className="text-[#6B7280] text-xs">{label}</span>
+        <span className="font-semibold">₹{payload[0].value.toLocaleString()}</span>
       </div>
+    );
+  }
+  return null;
+};
+
+export default function Dashboard() {
+  const [timeRange, setTimeRange] = useState('1D');
+  const ranges = ['1D', '7D', '1M', '1Y', 'ALL'];
+
+  return (
+    <div className="flex flex-col gap-5 pb-10">
+      
+      {/* Top Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <StatCard label="NIFTY 50" value={22450} change={1.2} isPositive={true} prefix="₹" />
+        <StatCard label="SENSEX" value={73800} change={0.8} isPositive={true} prefix="₹" />
+        <StatCard label="Market Sentiment" value="BULLISH" change={0} isPositive={true} />
+        <StatCard label="Active IPOs" value={4} />
+      </div>
+
+      {/* Main Chart */}
+      <Card className="p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-[#111111]">NIFTY 50 Overview</h2>
+            <Badge variant="success">Market Open</Badge>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {ranges.map(range => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                  timeRange === range 
+                    ? 'bg-[#111111] text-white' 
+                    : 'bg-transparent border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F3F4F6]'
+                }`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={mockChartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#22C55E" stopOpacity={0.15}/>
+                  <stop offset="95%" stopColor="#22C55E" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#6B7280', strokeWidth: 1, strokeDasharray: '4 4' }} />
+              <Area 
+                type="monotone" 
+                dataKey="value" 
+                stroke="#22C55E" 
+                strokeWidth={2}
+                fillOpacity={1} 
+                fill="url(#colorValue)" 
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* Top Movers Table */}
+      <Card className="p-0 overflow-hidden">
+        <div className="px-6 py-5 border-b border-[#E5E7EB]">
+          <h2 className="text-lg font-semibold text-[#111111]">Top Movers</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="text-[11px] uppercase tracking-[0.08em] text-[#6B7280] bg-[#F7F8F5]">
+              <tr>
+                <th className="px-6 py-4 font-medium">Name</th>
+                <th className="px-6 py-4 font-medium">Price</th>
+                <th className="px-6 py-4 font-medium">24h Change</th>
+                <th className="px-6 py-4 font-medium">7d Change</th>
+                <th className="px-6 py-4 font-medium text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E5E7EB]">
+              {mockMovers.map((stock) => (
+                <tr key={stock.name} className="hover:bg-[#F7F8F5] transition-colors duration-150">
+                  <td className="px-6 py-4 font-semibold text-[#111111]">{stock.name}</td>
+                  <td className="px-6 py-4 font-bold tabular-nums">₹{stock.price.toFixed(2)}</td>
+                  <td className={`px-6 py-4 font-semibold tabular-nums ${stock.change24h >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+                    {stock.change24h > 0 ? '+' : ''}{stock.change24h}%
+                  </td>
+                  <td className={`px-6 py-4 font-semibold tabular-nums ${stock.change7d >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+                    {stock.change7d > 0 ? '+' : ''}{stock.change7d}%
+                  </td>
+                  <td className="px-6 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" className="w-[60px]">Sell</Button>
+                      <Button variant="primary" size="sm" className="w-[60px]">Buy</Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      
     </div>
-  )
+  );
 }

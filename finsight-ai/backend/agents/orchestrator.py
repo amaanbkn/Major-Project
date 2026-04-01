@@ -135,6 +135,12 @@ async def orchestrate(query: str, user_id: str = "default") -> OrchestratorResul
     # Greeting — no tools needed
     elif intent_type == "greeting":
         result.add_step("👋 Greeting detected — responding directly")
+        result.response = (
+            "Hello! I'm FinSight AI, your market research assistant. "
+            "You can ask me about Indian stocks, SIP recommendations, "
+            "upcoming IPOs, or market sentiment. What would you like to know?"
+        )
+        return result
 
     # ── Step 3: Execute all tools concurrently ───────────────
     if tasks:
@@ -225,6 +231,11 @@ async def orchestrate_streaming(
         intent_type = intent.get("intent", "general_finance")
         symbols = intent.get("symbols", [])
         context_data = {}
+
+        if intent_type == "greeting":
+            yield {"type": "chunk", "content": "Hello! I'm FinSight AI 👋 Ask me about any Indian stock, SIP, IPO, or market sentiment."}
+            yield {"type": "done", "content": ""}
+            return
 
         # Gather tools based on intent
         if intent_type in ("stock_price", "stock_analysis") and symbols:

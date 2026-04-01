@@ -25,6 +25,10 @@ export async function* streamChat(message, userId = 'default') {
     body: JSON.stringify({ message, user_id: userId, stream: true }),
   });
 
+  if (!response.ok) {
+    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+  }
+
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
