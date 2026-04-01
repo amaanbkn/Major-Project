@@ -17,11 +17,10 @@ export const NewsCard = () => {
       </div>
       <div className="flex flex-col">
         {mockNews.map((item, index) => (
-          <div 
-            key={item.id} 
-            className={`px-5 py-4 hover:bg-[#F7F8F5] transition-colors duration-150 cursor-pointer ${
-              index !== mockNews.length - 1 ? 'border-b border-[#E5E7EB]' : ''
-            }`}
+          <div
+            key={item.id}
+            className={`px-5 py-4 hover:bg-[#F7F8F5] transition-colors duration-150 cursor-pointer ${index !== mockNews.length - 1 ? 'border-b border-[#E5E7EB]' : ''
+              }`}
           >
             <div className="flex justify-between items-center mb-1.5">
               <Badge variant="neutral" className="text-[9px] px-1.5 py-0.5 rounded-[4px]">{item.source}</Badge>
