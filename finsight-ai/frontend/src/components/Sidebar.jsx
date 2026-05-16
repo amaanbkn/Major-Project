@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, LineChart, Wallet2, ArrowLeftRight, Settings, Sparkles } from 'lucide-react';
+import { LayoutDashboard, LineChart, Wallet2, ArrowLeftRight, Settings, Sparkles, PiggyBank } from 'lucide-react';
 
 const navItems = [
   { path: '/', icon: Sparkles, label: 'Chat' },
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/market', icon: LineChart, label: 'Market' },
   { path: '/portfolio', icon: Wallet2, label: 'Wallet' },
+  { path: '/sip', icon: PiggyBank, label: 'SIP Advisor' },
   { path: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
   { path: '/settings', icon: Settings, label: 'Settings' }
 ];

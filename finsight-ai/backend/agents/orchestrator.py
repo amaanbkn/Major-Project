@@ -115,12 +115,77 @@ async def orchestrate(query: str, user_id: str = "default") -> OrchestratorResul
 
     # Paper trading intent
     elif intent_type == "paper_trade":
-        if symbols:
-            for sym in symbols:
-                tasks.append(("fetch_price", _tool_fetch_price(sym)))
-                result.add_step(f"📊 Fetching price for {sym} (paper trade)...")
-        tasks.append(("get_portfolio", _tool_get_portfolio(user_id)))
-        result.add_step("💼 Loading portfolio data...")
+        result.add_step("🔍 Parsing trade details from query...")
+        trade_details = await _parse_trade_intent(query, symbols)
+        result.add_step(f"📝 Trade parsed: {trade_details}")
+
+        action = trade_details.get("action")
+        quantity = trade_details.get("quantity")
+        trade_symbol = trade_details.get("symbol", symbols[0] if symbols else None)
+
+        if not action or not trade_symbol:
+            result.add_step("⚠️ Could not determine trade action or symbol — asking for clarification")
+            result.response = (
+                "I'd like to help you with a paper trade, but I need a bit more detail. "
+                "Could you please specify:\n"
+                "- **Action**: Buy or Sell?\n"
+                "- **Stock symbol**: e.g., RELIANCE, INFY, TCS\n"
+                "- **Quantity**: Number of shares\n\n"
+                "Example: *\"Buy 10 shares of RELIANCE\"*"
+            )
+            return result
+
+        if not quantity or quantity <= 0:
+            result.add_step("⚠️ Could not determine quantity — asking for clarification")
+            result.response = (
+                f"I can see you want to **{action.upper()}** **{trade_symbol.upper()}**, "
+                f"but I need the **quantity** (number of shares).\n\n"
+                f"Example: *\"{action.capitalize()} 10 shares of {trade_symbol.upper()}\"*"
+            )
+            return result
+
+        # Fetch current price for the trade
+        result.add_step(f"📊 Fetching current price for {trade_symbol}...")
+        try:
+            price_data = await _tool_fetch_price(trade_symbol)
+            current_price = price_data.get("price", 0)
+            result.market_data = price_data
+            result.add_step(f"✅ Current price: ₹{current_price:,.2f}")
+        except Exception as e:
+            result.add_step(f"⚠️ Failed to fetch price: {e}")
+            result.response = f"Sorry, I couldn't fetch the current price for **{trade_symbol.upper()}**. Please check the symbol and try again."
+            return result
+
+        if current_price <= 0:
+            result.response = f"Could not determine a valid price for **{trade_symbol.upper()}**. The market may be closed or the symbol may be invalid."
+            return result
+
+        # Execute the trade
+        result.add_step(f"💰 Executing {action.upper()}: {quantity}x {trade_symbol} @ ₹{current_price:,.2f}...")
+        try:
+            if action.lower() == "buy":
+                trade_result = await _execute_buy(user_id, trade_symbol, quantity, current_price)
+            else:
+                trade_result = await _execute_sell(user_id, trade_symbol, quantity, current_price)
+
+            if trade_result.get("status") == "success":
+                total = quantity * current_price
+                result.add_step(f"✅ Trade executed successfully")
+                result.response = (
+                    f"**Executed:** {action.capitalize()}ed **{quantity}** shares of **{trade_symbol.upper()}** "
+                    f"at **₹{current_price:,.2f}**. Total: **₹{total:,.2f}**.\n\n"
+                    f"💰 Remaining balance: **₹{trade_result.get('remaining_balance', 'N/A'):,.2f}**\n\n"
+                    f"{trade_result.get('message', '')}\n\n"
+                    f"*Updated portfolio saved.*"
+                )
+            else:
+                result.add_step(f"⚠️ Trade failed: {trade_result.get('message', 'Unknown error')}")
+                result.response = f"**Trade failed:** {trade_result.get('message', 'Unknown error')}. Please check your portfolio balance and holdings."
+        except Exception as e:
+            result.add_step(f"⚠️ Trade execution error: {e}")
+            result.response = f"An error occurred while executing the trade: {str(e)}. Please try again."
+
+        return result
 
     # SIP advice
     elif intent_type == "sip_advice":
@@ -266,12 +331,61 @@ async def orchestrate_streaming(
             context_data["ipo_data"] = ipo
 
         elif intent_type == "paper_trade":
-            if symbols:
-                for sym in symbols:
-                    price = await _tool_fetch_price(sym)
-                    context_data["market_data"] = price
-            portfolio = await _tool_get_portfolio(user_id)
-            context_data["portfolio_data"] = portfolio
+            yield {"type": "step", "content": "Parsing trade details..."}
+            trade_details = await _parse_trade_intent(query, symbols)
+            action = trade_details.get("action")
+            quantity = trade_details.get("quantity")
+            trade_symbol = trade_details.get("symbol", symbols[0] if symbols else None)
+
+            if not action or not trade_symbol or not quantity or quantity <= 0:
+                yield {"type": "chunk", "content": (
+                    "I'd like to help you with a paper trade, but I need more detail.\n\n"
+                    "Please specify:\n"
+                    "- **Action**: Buy or Sell?\n"
+                    "- **Stock symbol**: e.g., RELIANCE, INFY, TCS\n"
+                    "- **Quantity**: Number of shares\n\n"
+                    "Example: *\"Buy 10 shares of RELIANCE\"*"
+                )}
+                yield {"type": "done", "content": ""}
+                return
+
+            yield {"type": "step", "content": f"Fetching price for {trade_symbol}..."}
+            try:
+                price_data = await _tool_fetch_price(trade_symbol)
+                current_price = price_data.get("price", 0)
+                yield {"type": "data", "content": {"price": price_data}}
+            except Exception as e:
+                yield {"type": "chunk", "content": f"Sorry, couldn't fetch price for **{trade_symbol}**: {e}"}
+                yield {"type": "done", "content": ""}
+                return
+
+            if current_price <= 0:
+                yield {"type": "chunk", "content": f"Could not get a valid price for **{trade_symbol}**. Market may be closed."}
+                yield {"type": "done", "content": ""}
+                return
+
+            yield {"type": "step", "content": f"Executing {action.upper()}: {quantity}x {trade_symbol} @ ₹{current_price:,.2f}..."}
+            try:
+                if action.lower() == "buy":
+                    trade_result = await _execute_buy(user_id, trade_symbol, quantity, current_price)
+                else:
+                    trade_result = await _execute_sell(user_id, trade_symbol, quantity, current_price)
+
+                if trade_result.get("status") == "success":
+                    total = quantity * current_price
+                    yield {"type": "chunk", "content": (
+                        f"**Executed:** {action.capitalize()}ed **{quantity}** shares of **{trade_symbol.upper()}** "
+                        f"at **₹{current_price:,.2f}**. Total: **₹{total:,.2f}**.\n\n"
+                        f"💰 Remaining balance: **₹{trade_result.get('remaining_balance', 'N/A'):,.2f}**\n\n"
+                        f"*Updated portfolio saved.*"
+                    )}
+                else:
+                    yield {"type": "chunk", "content": f"**Trade failed:** {trade_result.get('message', 'Unknown error')}"}
+            except Exception as e:
+                yield {"type": "chunk", "content": f"Trade execution error: {str(e)}"}
+
+            yield {"type": "done", "content": ""}
+            return
 
         # RAG for all non-greeting queries
         if intent_type not in ("greeting",):
@@ -332,3 +446,75 @@ async def _tool_get_portfolio(user_id: str) -> dict:
 async def _tool_get_nifty() -> dict:
     from services.market_data import get_nifty_index
     return await get_nifty_index()
+
+
+async def _execute_buy(user_id: str, symbol: str, quantity: float, price: float) -> dict:
+    """Execute a paper BUY order via the trading engine."""
+    from trading_engine import buy_stock
+    return await buy_stock(user_id, symbol, quantity, price)
+
+
+async def _execute_sell(user_id: str, symbol: str, quantity: float, price: float) -> dict:
+    """Execute a paper SELL order via the trading engine."""
+    from trading_engine import sell_stock
+    return await sell_stock(user_id, symbol, quantity, price)
+
+
+async def _parse_trade_intent(query: str, symbols: list[str]) -> dict:
+    """
+    Use Gemini to extract trade action, quantity, and symbol from a natural language query.
+    Returns: {action: 'buy'|'sell', quantity: int, symbol: str}
+    """
+    parse_prompt = f"""Extract the trade details from this user query.
+
+Return ONLY valid JSON, nothing else, no markdown:
+{{
+  "action": "buy" or "sell" or null,
+  "quantity": <number> or null,
+  "symbol": "<TICKER>" or null
+}}
+
+Rules:
+- action must be exactly "buy" or "sell" (lowercase), or null if unclear
+- quantity must be a positive number, or null if not mentioned
+- symbol must be an NSE stock ticker in UPPERCASE, or null if not mentioned
+- If the user says "purchase" or "invest in", treat as "buy"
+- If the user says "exit" or "dump" or "get rid of", treat as "sell"
+
+User query: {query}
+Already-detected symbols: {symbols}
+"""
+    try:
+        from services.gemini import get_chat_model
+        import json
+
+        model = get_chat_model()
+        response = model.generate_content(parse_prompt)
+        text = response.text.strip()
+
+        # Strip markdown fences if present
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            text = text.rsplit("```", 1)[0]
+
+        parsed = json.loads(text)
+
+        # Use detected symbols as fallback
+        if not parsed.get("symbol") and symbols:
+            parsed["symbol"] = symbols[0]
+
+        # Ensure quantity is numeric
+        if parsed.get("quantity") is not None:
+            try:
+                parsed["quantity"] = float(parsed["quantity"])
+            except (ValueError, TypeError):
+                parsed["quantity"] = None
+
+        return parsed
+    except Exception as e:
+        logger.error(f"Trade intent parsing error: {e}")
+        return {
+            "action": None,
+            "quantity": None,
+            "symbol": symbols[0] if symbols else None,
+        }

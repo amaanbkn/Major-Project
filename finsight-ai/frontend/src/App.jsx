@@ -4,6 +4,10 @@ import Chat from './components/Chat';
 import Dashboard from './components/Dashboard';
 import IPOTracker from './components/IPOTracker';
 import Portfolio from './components/Portfolio';
+import SIPAdvisor from './components/SIPAdvisor';
+import Settings from './components/Settings';
+import Transactions from './components/Transactions';
+import Market from './components/Market';
 
 export default function App() {
   return (
@@ -16,11 +20,11 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Chat />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/market" element={<IPOTracker />} />
+            <Route path="/market" element={<Market />} />
             <Route path="/portfolio" element={<Portfolio />} />
-            {/* Fallbacks */}
-            <Route path="/transactions" element={<Portfolio />} />
-            <Route path="/settings" element={<Dashboard />} />
+            <Route path="/transactions" element={<Transactions />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/sip" element={<SIPAdvisor />} />
             <Route path="/ipo" element={<IPOTracker />} />
           </Routes>
         </div>
