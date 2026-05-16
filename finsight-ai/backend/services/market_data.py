@@ -48,10 +48,34 @@ async def get_stock_price(symbol: str) -> dict:
     """
     try:
         ticker = yf.Ticker(_nse_symbol(symbol))
-        info = await asyncio.to_thread(lambda: ticker.info)
 
-        price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
-        prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose", 0)
+        def _fetch_info():
+            fast_info = {}
+            try:
+                fast_info = ticker.fast_info or {}
+            except Exception:
+                fast_info = {}
+            try:
+                info = ticker.info or {}
+            except Exception:
+                info = {}
+            return fast_info, info
+
+        fast_info, info = await asyncio.to_thread(_fetch_info)
+
+        price = (
+            fast_info.get("last_price")
+            or fast_info.get("previous_close")
+            or info.get("currentPrice")
+            or info.get("regularMarketPrice")
+            or 0
+        )
+        prev_close = (
+            fast_info.get("previous_close")
+            or info.get("previousClose")
+            or info.get("regularMarketPreviousClose")
+            or 0
+        )
         change = round(price - prev_close, 2) if price and prev_close else 0
         change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
 
@@ -61,13 +85,13 @@ async def get_stock_price(symbol: str) -> dict:
             "previous_close": prev_close,
             "change": change,
             "change_pct": change_pct,
-            "volume": info.get("volume", 0),
-            "day_high": info.get("dayHigh", 0),
-            "day_low": info.get("dayLow", 0),
-            "52w_high": info.get("fiftyTwoWeekHigh", 0),
-            "52w_low": info.get("fiftyTwoWeekLow", 0),
-            "market_cap": info.get("marketCap", 0),
-            "pe_ratio": info.get("trailingPE", 0),
+            "volume": int(fast_info.get("volume") or info.get("volume", 0) or 0),
+            "day_high": round(float(info.get("dayHigh", 0) or 0), 2),
+            "day_low": round(float(info.get("dayLow", 0) or 0), 2),
+            "52w_high": round(float(info.get("fiftyTwoWeekHigh", 0) or 0), 2),
+            "52w_low": round(float(info.get("fiftyTwoWeekLow", 0) or 0), 2),
+            "market_cap": int(info.get("marketCap", 0) or 0),
+            "pe_ratio": round(float(info.get("trailingPE", 0) or 0), 2),
             "timestamp": datetime.now().isoformat(),
             "status": "success",
         }
@@ -159,33 +183,49 @@ async def get_nifty50_snapshot() -> list[dict]:
     try:
         tickers_str = " ".join([_nse_symbol(s) for s in NIFTY_50_SYMBOLS])
         df = await asyncio.to_thread(
-            lambda: yf.download(tickers_str, period="2d", group_by="ticker", progress=False)
+            lambda: yf.download(
+                tickers_str,
+                period="2d",
+                group_by="ticker",
+                progress=False,
+                threads=False,
+                auto_adjust=False,
+            )
         )
 
         for sym in NIFTY_50_SYMBOLS:
             try:
                 nse_sym = _nse_symbol(sym)
-                if nse_sym in df.columns.get_level_values(0):
-                    ticker_data = df[nse_sym]
-                    if len(ticker_data) >= 2:
-                        latest = ticker_data.iloc[-1]
-                        prev = ticker_data.iloc[-2]
-                        price = round(float(latest["Close"]), 2)
-                        prev_close = round(float(prev["Close"]), 2)
-                        change = round(price - prev_close, 2)
-                        change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
-                    else:
-                        latest = ticker_data.iloc[-1]
-                        price = round(float(latest["Close"]), 2)
-                        change = 0
-                        change_pct = 0
+                ticker_data = None
 
-                    snapshot.append({
-                        "symbol": sym,
-                        "price": price,
-                        "change": change,
-                        "change_pct": change_pct,
-                    })
+                if isinstance(df.columns, pd.MultiIndex) and nse_sym in df.columns.levels[0]:
+                    ticker_data = df[nse_sym]
+                elif nse_sym in df.columns:
+                    ticker_data = df[[col for col in df.columns if col == nse_sym]]
+
+                if ticker_data is None or ticker_data.empty:
+                    logger.warning(f"Skipping {sym} in NIFTY50 snapshot because data was unavailable")
+                    continue
+
+                if len(ticker_data) >= 2:
+                    latest = ticker_data.iloc[-1]
+                    prev = ticker_data.iloc[-2]
+                    price = round(float(latest["Close"]), 2)
+                    prev_close = round(float(prev["Close"]), 2)
+                    change = round(price - prev_close, 2)
+                    change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
+                else:
+                    latest = ticker_data.iloc[-1]
+                    price = round(float(latest["Close"]), 2)
+                    change = 0
+                    change_pct = 0
+
+                snapshot.append({
+                    "symbol": sym,
+                    "price": price,
+                    "change": change,
+                    "change_pct": change_pct,
+                })
             except Exception as e:
                 logger.warning(f"Skipping {sym} in NIFTY50 snapshot: {e}")
                 continue
@@ -204,9 +244,22 @@ async def get_nifty_index() -> dict:
     """Get NIFTY 50 index value."""
     try:
         ticker = yf.Ticker("^NSEI")
-        info = await asyncio.to_thread(lambda: ticker.info)
-        price = info.get("regularMarketPrice", 0)
-        prev = info.get("regularMarketPreviousClose", 0)
+
+        def _fetch_info():
+            fast_info = {}
+            try:
+                fast_info = ticker.fast_info or {}
+            except Exception:
+                fast_info = {}
+            try:
+                info = ticker.info or {}
+            except Exception:
+                info = {}
+            return fast_info, info
+
+        fast_info, info = await asyncio.to_thread(_fetch_info)
+        price = fast_info.get("last_price") or info.get("regularMarketPrice", 0)
+        prev = fast_info.get("previous_close") or info.get("regularMarketPreviousClose", 0)
         change = round(price - prev, 2) if price and prev else 0
         change_pct = round((change / prev) * 100, 2) if prev else 0
 

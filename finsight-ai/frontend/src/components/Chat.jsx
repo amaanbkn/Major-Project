@@ -6,7 +6,6 @@ import { ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
 import { StockCard } from './StockCard';
 import { SentimentBar } from './SentimentBar';
 import { NewsCard } from './NewsCard';
-import { streamChat } from '../api';
 
 const initialMessages = [
   {
@@ -18,19 +17,11 @@ const initialMessages = [
   }
 ];
 
-const mockStreamingResponse = "Reliance Industries is currently showing strong bullish momentum driven by robust quarterly earnings and strategic expansions in their retail sector. Key technical indicators point towards a potential breakout if it sustains above the ₹2,950 level.\n\nWould you like me to run a deeper technical analysis on the daily charts or look at their latest earnings report?";
-
-const mockThinkingSteps = [
-  "Fetching current price and volume data for RELIANCE...",
-  "Analyzing latest news sentiment from 4 sources...",
-  "Computing RSI, MACD, and moving averages...",
-  "Synthesizing market context..."
-];
-
 export default function Chat() {
   const [messages, setMessages] = useState(initialMessages);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [currentSteps, setCurrentSteps] = useState([]);
   const [expandedSteps, setExpandedSteps] = useState(false);
@@ -61,57 +52,106 @@ export default function Chat() {
     const currentInput = inputValue;
     setInputValue('');
     setIsTyping(true);
+    setIsStreaming(true);
     setCurrentSteps([]);
     setExpandedSteps(true);
     setStreamingText('');
 
     try {
-      let accumulatedText = '';
-      let accumulatedSteps = [];
-      const chatStream = streamChat(currentInput);
-      
-      for await (const data of chatStream) {
-        if (data.type === 'step') {
-          accumulatedSteps.push(data.content);
-          setCurrentSteps([...accumulatedSteps]);
-        } else if (data.type === 'chunk') {
-          accumulatedText += data.content;
-          setStreamingText(accumulatedText);
-        } else if (data.type === 'error') {
-          accumulatedText += "\n⚠️ " + data.content;
-          setStreamingText(accumulatedText);
-        }
+      let fullText = '';
+      let buffer = '';
+      let stepList = [];
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: currentInput, user_id: 'default', stream: true }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
       }
 
-      setIsTyping(false);
-      setMessages(prev => [
-        ...prev, 
-        {
-          id: Date.now() + 1,
-          role: 'assistant',
-          content: accumulatedText,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          steps: accumulatedSteps.length > 0 ? accumulatedSteps : null
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.type === 'chunk' && event.content) {
+              fullText += event.content;
+              setStreamingText(fullText);
+            }
+
+            if (event.type === 'step' && event.content) {
+              stepList.push(event.content);
+              setCurrentSteps([...stepList]);
+            }
+
+            if (event.type === 'done') {
+              setMessages(prev => [...prev, {
+                id: Date.now() + 1,
+                role: 'assistant',
+                content: fullText || 'No response received.',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                steps: stepList.length > 0 ? stepList : null,
+              }] );
+              setStreamingText('');
+              setIsStreaming(false);
+              setIsTyping(false);
+              setCurrentSteps([]);
+              setExpandedSteps(false);
+              fullText = '';
+            }
+
+            if (event.type === 'error') {
+              setMessages(prev => [...prev, {
+                id: Date.now() + 1,
+                role: 'assistant',
+                content: 'Something went wrong. Please try again.',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                steps: null,
+              }] );
+              setIsStreaming(false);
+              setIsTyping(false);
+              setStreamingText('');
+              setCurrentSteps([]);
+              setExpandedSteps(false);
+            }
+          } catch {
+            // malformed JSON line — skip silently
+          }
         }
-      ]);
-      setStreamingText('');
-      setCurrentSteps([]);
-      setExpandedSteps(false);
-    } catch (error) {
-       console.error("Stream failed:", error);
+      }
+    } catch (networkErr) {
+       console.error('Network error:', networkErr);
        setIsTyping(false);
-       setMessages(prev => [
-        ...prev, 
+       setIsStreaming(false);
+       setMessages(prev => [...prev, 
         {
           id: Date.now() + 1,
           role: 'assistant',
-          content: "I'm sorry, I am having trouble connecting to the backend. Please ensure the backend is running.",
+          content: 'Could not connect to server.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           steps: null
         }
       ]);
       setStreamingText('');
       setCurrentSteps([]);
+      setExpandedSteps(false);
     }
   };
 
@@ -139,7 +179,7 @@ export default function Chat() {
 
         {/* Chat Area */}
         <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6">
-          {messages.map((msg, index) => (
+          {messages.map((msg) => (
             <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} max-w-full animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out`}>
               
               {/* Agentic Steps for old messages (collapsed by default) */}
@@ -177,8 +217,6 @@ export default function Chat() {
           {/* Active Thinking/Streaming state */}
           {isTyping && (
             <div className="flex flex-col items-start max-w-[80%] animate-in slide-in-from-bottom-2 fade-in duration-300">
-              
-              {/* Active Agentic Steps */}
               {currentSteps.length > 0 && (
                 <div className="mb-3 w-full ml-10 flex flex-col gap-1.5 transition-all duration-300">
                   {currentSteps.map((step, i) => (
@@ -192,32 +230,37 @@ export default function Chat() {
                 </div>
               )}
 
-              <div className="flex gap-3 w-full">
-                <div className="w-7 h-7 rounded-full bg-[#111111] flex flex-shrink-0 items-center justify-center mt-1">
-                  <span className="text-white font-bold text-xs">F</span>
-                </div>
-                
-                {streamingText ? (
-                  <div className="px-4 py-3 text-[14px] leading-relaxed bg-[#F7F8F5] text-[#111111] rounded-[16px_16px_16px_4px] shadow-sm">
-                    <p className="whitespace-pre-wrap">{streamingText}<span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-[#111111] animate-blink"></span></p>
+              {!streamingText && (
+                <div className="flex gap-3 w-full">
+                  <div className="w-7 h-7 rounded-full bg-[#111111] flex flex-shrink-0 items-center justify-center mt-1">
+                    <span className="text-white font-bold text-xs">F</span>
                   </div>
-                ) : (
                   <div className="px-5 py-4 bg-[#F7F8F5] rounded-[16px_16px_16px_4px] flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-[#111111] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                     <div className="w-1.5 h-1.5 bg-[#111111] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                     <div className="w-1.5 h-1.5 bg-[#111111] rounded-full animate-bounce"></div>
                   </div>
-                )}
-              </div>
-              
-              {streamingText && (
-                <span className="text-[11px] text-[#6B7280] mt-1.5 ml-10">
-                  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                </div>
               )}
             </div>
           )}
-          
+
+          {isStreaming && streamingText && (
+            <div className="flex flex-col items-start max-w-[80%] animate-in slide-in-from-bottom-2 fade-in duration-300">
+              <div className="flex gap-3 w-full">
+                <div className="w-7 h-7 rounded-full bg-[#111111] flex flex-shrink-0 items-center justify-center mt-1">
+                  <span className="text-white font-bold text-xs">F</span>
+                </div>
+                <div className="px-4 py-3 text-[14px] leading-relaxed bg-[#F7F8F5] text-[#111111] rounded-[16px_16px_16px_4px] shadow-sm">
+                  <p className="whitespace-pre-wrap">
+                    {streamingText}
+                    <span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-[#111111] animate-blink"></span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} className="h-[2px] shrink-0" />
         </div>
 

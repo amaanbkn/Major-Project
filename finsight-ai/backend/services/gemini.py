@@ -139,6 +139,14 @@ async def classify_intent(query: str) -> dict:
     Use Gemini to classify user intent for the orchestrator.
     Returns: intent type and extracted entities (symbols, etc.)
     """
+    greeting_triggers = [
+        "hi", "hello", "hey", "hii", "helo", "howdy",
+        "good morning", "good evening", "good afternoon",
+        "thanks", "thank you", "bye", "okay", "ok"
+    ]
+    if query.strip().lower() in greeting_triggers:
+        return {"intent": "greeting", "symbols": [], "confidence": 1.0}
+
     classification_prompt = f"""
 You are an intent classifier for a financial chatbot. 
 Classify the user query into EXACTLY one of these intents:

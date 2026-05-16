@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import feedparser
+import requests
 from loguru import logger
 
 # ── In-memory cache ─────────────────────────────────────────
@@ -70,20 +71,47 @@ async def _fetch_rss_sentiment(source_name: str, urls: list[str]) -> dict:
     """Fetch and analyze sentiment from RSS feeds."""
     articles = []
     scores = []
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FinSightAI/1.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
 
     for url in urls:
         try:
-            feed = await asyncio.to_thread(feedparser.parse, url)
+            response = await asyncio.to_thread(requests.get, url, headers=headers, timeout=12)
+            response.raise_for_status()
+            feed = feedparser.parse(response.text)
+
+            if getattr(feed, "bozo", False) and hasattr(feed, "bozo_exception"):
+                logger.warning(f"Bozo parser warning for {source_name} ({url}): {feed.bozo_exception}")
+
             for entry in feed.entries[:10]:  # Top 10 articles per feed
-                title = entry.get("title", "")
-                summary = entry.get("summary", "")
-                combined_text = f"{title} {summary}"
+                title = entry.get("title", "") or ""
+                summary = entry.get("summary", "") or entry.get("description", "") or ""
+                if not summary and entry.get("content"):
+                    content_value = entry.get("content")
+                    if isinstance(content_value, list):
+                        summary = " ".join([str(item.get("value", "")) for item in content_value])
+                    else:
+                        summary = str(content_value)
+
+                combined_text = f"{title} {summary}".strip()
+                if not combined_text:
+                    continue
+
                 score = _analyze_text_sentiment(combined_text)
                 scores.append(score)
+                published = entry.get("published", entry.get("updated", ""))
+                if not published and getattr(entry, "published_parsed", None):
+                    try:
+                        published = datetime(*entry.published_parsed[:6]).isoformat()
+                    except Exception:
+                        published = ""
+
                 articles.append({
                     "title": title,
                     "link": entry.get("link", ""),
-                    "published": entry.get("published", ""),
+                    "published": published,
                     "sentiment_score": score,
                     "source": source_name,
                 })

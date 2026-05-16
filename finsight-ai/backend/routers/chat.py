@@ -47,8 +47,17 @@ async def chat(request: ChatRequest):
     logger.info(f"💬 Chat request from {request.user_id}: {request.message[:80]}")
 
     if request.stream:
+        async def stream():
+            from agents.orchestrator import orchestrate_streaming
+
+            async for event in orchestrate_streaming(
+                query=request.message,
+                user_id=request.user_id or "default",
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+
         return StreamingResponse(
-            _stream_response(request.message, request.user_id),
+            stream(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
