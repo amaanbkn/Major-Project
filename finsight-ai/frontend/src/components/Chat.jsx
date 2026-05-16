@@ -6,6 +6,7 @@ import { ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
 import { StockCard } from './StockCard';
 import { SentimentBar } from './SentimentBar';
 import { NewsCard } from './NewsCard';
+import { getNifty50, getMarketSentiment } from '../api';
 
 const initialMessages = [
   {
@@ -26,6 +27,10 @@ export default function Chat() {
   const [currentSteps, setCurrentSteps] = useState([]);
   const [expandedSteps, setExpandedSteps] = useState(false);
   
+  const [marketData, setMarketData] = useState(null);
+  const [sentimentData, setSentimentData] = useState(null);
+  const [newsData, setNewsData] = useState([]);
+  
   const messagesEndRef = useRef(null);
   
   const scrollToBottom = () => {
@@ -35,6 +40,39 @@ export default function Chat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingText, currentSteps, expandedSteps]);
+
+  useEffect(() => {
+    async function fetchSidebarData() {
+      try {
+        const [niftyRes, sentRes] = await Promise.allSettled([
+          getNifty50(),
+          getMarketSentiment()
+        ]);
+
+        if (niftyRes.status === 'fulfilled' && niftyRes.value) {
+          setMarketData(niftyRes.value.index);
+        }
+
+        if (sentRes.status === 'fulfilled' && sentRes.value) {
+          setSentimentData(sentRes.value);
+          // Extract top news from sources
+          const allNews = [];
+          const sources = sentRes.value.sources || {};
+          if (sources.economic_times && sources.economic_times.articles) {
+            allNews.push(...sources.economic_times.articles.map(a => ({...a, source: 'ET'})));
+          }
+          if (sources.moneycontrol && sources.moneycontrol.articles) {
+            allNews.push(...sources.moneycontrol.articles.map(a => ({...a, source: 'MC'})));
+          }
+          // Sort or slice if necessary, returning top 4
+          setNewsData(allNews.slice(0, 4));
+        }
+      } catch (err) {
+        console.error("Failed to fetch sidebar data", err);
+      }
+    }
+    fetchSidebarData();
+  }, []);
 
   const handleSend = async (e) => {
     e?.preventDefault();
@@ -302,9 +340,15 @@ export default function Chat() {
 
       {/* RIGHT — Market Context Panel */}
       <div className="lg:w-[40%] flex flex-col gap-6 overflow-y-auto pr-1 pb-6 hide-scrollbar flex-shrink-0">
-        <StockCard />
-        <SentimentBar score={68} />
-        <NewsCard />
+        <StockCard 
+          symbol="NIFTY 50" 
+          name="Market Index" 
+          price={marketData?.value ?? 22450.50} 
+          change={marketData?.change_pct ?? 1.25} 
+          isPositive={(marketData?.change_pct ?? 1.25) >= 0} 
+        />
+        <SentimentBar score={sentimentData ? ((sentimentData.overall_score + 1) / 2) * 100 : 68} />
+        <NewsCard news={newsData} />
       </div>
     </div>
   );

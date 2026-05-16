@@ -1,15 +1,11 @@
-"""
-FinSight AI — Chat Router
-POST /api/chat — Streaming conversational interface with agentic orchestration.
-"""
-
 import json
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
+from dependencies import get_current_user
 
 router = APIRouter()
 
@@ -30,21 +26,14 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, current_user: str = Depends(get_current_user)):
     """
     Main chat endpoint. Supports streaming (SSE) and non-streaming mode.
-
-    Streaming mode (default):
-    - Returns Server-Sent Events (SSE)
-    - Event types: step, chunk, data, done, error
-
-    Non-streaming mode:
-    - Returns complete JSON response
     """
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    logger.info(f"💬 Chat request from {request.user_id}: {request.message[:80]}")
+    logger.info(f"💬 Chat request from {current_user}: {request.message[:80]}")
 
     if request.stream:
         async def stream():
@@ -52,7 +41,7 @@ async def chat(request: ChatRequest):
 
             async for event in orchestrate_streaming(
                 query=request.message,
-                user_id=request.user_id or "default",
+                user_id=current_user,
             ):
                 yield f"data: {json.dumps(event)}\n\n"
 
@@ -69,7 +58,7 @@ async def chat(request: ChatRequest):
         # Non-streaming mode
         from agents.orchestrator import orchestrate
 
-        result = await orchestrate(request.message, request.user_id)
+        result = await orchestrate(request.message, current_user)
         return ChatResponse(
             response=result.response,
             reasoning_steps=result.reasoning_steps,
@@ -108,7 +97,7 @@ async def _stream_response(message: str, user_id: str):
 
 
 @router.get("/chat/history")
-async def get_chat_history(user_id: str = "default", limit: int = 50):
+async def get_chat_history(limit: int = 50, current_user: str = Depends(get_current_user)):
     """Get chat history for a user."""
     import sqlite3
     import os
@@ -119,12 +108,12 @@ async def get_chat_history(user_id: str = "default", limit: int = 50):
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             "SELECT role, content, timestamp FROM chat_history WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?",
-            (user_id, limit),
+            (current_user, limit),
         ).fetchall()
         conn.close()
 
         return {
-            "user_id": user_id,
+            "user_id": current_user,
             "messages": [
                 {"role": r["role"], "content": r["content"], "timestamp": r["timestamp"]}
                 for r in reversed(rows)
@@ -132,4 +121,5 @@ async def get_chat_history(user_id: str = "default", limit: int = 50):
         }
     except Exception as e:
         logger.error(f"Chat history error: {e}")
-        return {"user_id": user_id, "messages": []}
+        return {"user_id": current_user, "messages": []}
+

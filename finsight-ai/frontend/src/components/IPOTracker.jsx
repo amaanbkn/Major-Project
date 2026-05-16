@@ -1,56 +1,64 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
-
-const mockIPOs = [
-  {
-    name: 'Bharti Hexacom Ltd',
-    sector: 'Telecom',
-    band: '₹542 - ₹570',
-    gmp: '₹85',
-    estListing: '₹655 (15%)',
-    open: 'Apr 03, 2024',
-    close: 'Apr 05, 2024',
-    subscription: 75,
-    status: 'ACTIVE'
-  },
-  {
-    name: 'Teerth Gopicon Ltd',
-    sector: 'Real Estate',
-    band: '₹111',
-    gmp: '₹22',
-    estListing: '₹133 (20%)',
-    open: 'Apr 08, 2024',
-    close: 'Apr 10, 2024',
-    subscription: 10,
-    status: 'UPCOMING'
-  },
-  {
-    name: 'Greenhitech Ventures',
-    sector: 'Energy',
-    band: '₹50 - ₹54',
-    gmp: '₹10',
-    estListing: '₹64 (18%)',
-    open: 'Apr 12, 2024',
-    close: 'Apr 15, 2024',
-    subscription: 0,
-    status: 'UPCOMING'
-  },
-  {
-    name: 'Athaang Infrastructure',
-    sector: 'Infrastructure',
-    band: '₹120 - ₹128',
-    gmp: '-₹5',
-    estListing: '₹123 (-4%)',
-    open: 'Mar 26, 2024',
-    close: 'Mar 28, 2024',
-    subscription: 100,
-    status: 'CLOSED'
-  }
-];
+import { Loader2 } from 'lucide-react';
+import { getIPOs, getGMPData } from '../api';
 
 export default function IPOTracker() {
+  const [ipos, setIpos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function fetchIPOData() {
+      try {
+        setLoading(true);
+        // Fetch base IPO details and GMP data in parallel
+        const [ipoRes, gmpRes] = await Promise.allSettled([
+          getIPOs(),
+          getGMPData()
+        ]);
+
+        let mergedIpos = [];
+        
+        // Check if getIPOs succeeded
+        if (ipoRes.status === 'fulfilled' && ipoRes.value && ipoRes.value.ipos) {
+          mergedIpos = ipoRes.value.ipos;
+        }
+
+        // Merge GMP data if available
+        if (gmpRes.status === 'fulfilled' && gmpRes.value && gmpRes.value.gmp_data) {
+          const gmpMap = {};
+          gmpRes.value.gmp_data.forEach(item => {
+            gmpMap[item.symbol || item.name] = item;
+          });
+          
+          mergedIpos = mergedIpos.map(ipo => {
+            const gmpInfo = gmpMap[ipo.symbol] || gmpMap[ipo.name];
+            if (gmpInfo) {
+              return {
+                ...ipo,
+                gmp: gmpInfo.gmp || ipo.gmp,
+                estListing: gmpInfo.estListing || ipo.estListing,
+                subscription: gmpInfo.subscription || ipo.subscription
+              };
+            }
+            return ipo;
+          });
+        }
+
+        setIpos(mergedIpos);
+      } catch (err) {
+        setError("Failed to load IPO data");
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchIPOData();
+  }, []);
+
   return (
     <div className="flex flex-col gap-6 pb-10">
       
@@ -66,60 +74,81 @@ export default function IPOTracker() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {mockIPOs.map((ipo, idx) => (
-          <Card key={idx} hoverable={true} className="p-6 flex flex-col h-full bg-white relative">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h2 className="text-lg font-bold text-[#111111] mb-1.5">{ipo.name}</h2>
-                <Badge variant="neutral">{ipo.sector}</Badge>
-              </div>
-              <Badge variant={ipo.status === 'ACTIVE' ? 'success' : ipo.status === 'CLOSED' ? 'neutral' : 'dark'}>
-                {ipo.status}
-              </Badge>
-            </div>
+      {error && (
+        <div className="bg-red-50 text-red-500 p-4 rounded-md">
+          {error}
+        </div>
+      )}
 
-            <div className="grid grid-cols-2 gap-y-5 gap-x-4 mb-6">
-              <div>
-                <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#6B7280] block mb-1">Price Band</span>
-                <span className="text-[15px] font-bold tabular-nums text-[#111111]">{ipo.band}</span>
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#6B7280] block mb-1">GMP</span>
-                <span className={`text-[15px] font-bold tabular-nums ${ipo.gmp.includes('-') ? 'text-[#EF4444]' : 'text-[#22C55E]'}`}>
-                  {ipo.gmp} <span className="text-xs font-semibold">({ipo.estListing})</span>
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#6B7280] block mb-1">Open Date</span>
-                <span className="text-[13px] font-medium text-[#111111]">{ipo.open}</span>
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#6B7280] block mb-1">Close Date</span>
-                <span className="text-[13px] font-medium text-[#111111]">{ipo.close}</span>
-              </div>
-            </div>
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <Loader2 className="w-10 h-10 animate-spin text-[#E5E7EB]" />
+        </div>
+      ) : ipos.length === 0 ? (
+        <Card className="p-8 text-center text-[#6B7280]">
+          No active or upcoming IPOs found at the moment.
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {ipos.map((ipo, idx) => {
+            const isNegativeGMP = String(ipo.gmp || '').includes('-');
+            const status = ipo.status || 'UPCOMING';
+            const subLvl = ipo.subscription || 0;
+            
+            return (
+              <Card key={idx} hoverable={true} className="p-6 flex flex-col h-full bg-white relative">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#111111] mb-1.5">{ipo.name}</h2>
+                    <Badge variant="neutral">{ipo.sector || 'Various'}</Badge>
+                  </div>
+                  <Badge variant={status === 'ACTIVE' ? 'success' : status === 'CLOSED' ? 'neutral' : 'dark'}>
+                    {status}
+                  </Badge>
+                </div>
 
-            <div className="mt-auto pt-4 border-t border-[#E5E7EB]">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-semibold text-[#111111]">Subscription Level</span>
-                <span className="text-xs font-medium text-[#6B7280]">{ipo.subscription}%</span>
-              </div>
-              <div className="w-full h-1.5 bg-[#F3F4F6] rounded-full overflow-hidden mb-5">
-                <div 
-                  className={`h-full ${ipo.subscription >= 100 ? 'bg-[#22C55E]' : ipo.subscription > 0 ? 'bg-[#111111]' : 'bg-transparent'}`} 
-                  style={{ width: `${Math.min(ipo.subscription, 100)}%` }}
-                ></div>
-              </div>
-              
-              <Button variant="primary" className="w-full">
-                Analyse with AI
-              </Button>
-            </div>
-          </Card>
-        ))}
-      </div>
+                <div className="grid grid-cols-2 gap-y-5 gap-x-4 mb-6">
+                  <div>
+                    <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#6B7280] block mb-1">Price Band</span>
+                    <span className="text-[15px] font-bold tabular-nums text-[#111111]">{ipo.band || 'TBA'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#6B7280] block mb-1">GMP</span>
+                    <span className={`text-[15px] font-bold tabular-nums ${isNegativeGMP ? 'text-[#EF4444]' : 'text-[#22C55E]'}`}>
+                      {ipo.gmp || 'N/A'} <span className="text-xs font-semibold">({ipo.estListing || 'N/A'})</span>
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#6B7280] block mb-1">Open Date</span>
+                    <span className="text-[13px] font-medium text-[#111111]">{ipo.open || 'TBA'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#6B7280] block mb-1">Close Date</span>
+                    <span className="text-[13px] font-medium text-[#111111]">{ipo.close || 'TBA'}</span>
+                  </div>
+                </div>
 
+                <div className="mt-auto pt-4 border-t border-[#E5E7EB]">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-semibold text-[#111111]">Subscription Level</span>
+                    <span className="text-xs font-medium text-[#6B7280]">{subLvl}x</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-[#F3F4F6] rounded-full overflow-hidden mb-5">
+                    <div 
+                      className={`h-full ${subLvl >= 1 ? 'bg-[#22C55E]' : subLvl > 0 ? 'bg-[#111111]' : 'bg-transparent'}`} 
+                      style={{ width: `${Math.min((subLvl / Math.max(1, subLvl)) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                  
+                  <Button variant="primary" className="w-full">
+                    Analyse with AI
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

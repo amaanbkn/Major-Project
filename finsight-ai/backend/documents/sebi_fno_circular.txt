@@ -1,0 +1,19 @@
+Securities and Exchange Board of India (SEBI)
+Circular No. SEBI/HO/MRD/MRD-PoD-2/P/CIR/2023/166
+
+Subject: Framework for Short Selling and Securities Lending and Borrowing (SLB)
+
+1. Background
+Short selling is defined as selling a stock which the seller does not own at the time of trade. All classes of investors, viz., retail and institutional investors, shall be permitted to short sell. Naked short selling shall not be permitted in the Indian securities market and accordingly, all investors would be required to mandatorily honor their obligation of delivering the securities at the time of settlement. 
+
+2. Eligible Securities
+Only those securities that are traded in the Futures & Options (F&O) segment shall be eligible for short selling. The list of eligible securities will be reviewed periodically by the stock exchanges based on the criteria specified by SEBI from time to time.
+
+3. Institutional Investors
+No institutional investor shall be allowed to do day trading i.e., square-off their transactions intra-day. In other words, all transactions would be grossed for institutional investors at the custodians' level and the institutions would be required to fulfill their obligations on a gross basis. The custodians, however, would continue to settle their deliveries on a net basis with the stock exchanges.
+
+4. Retail Investors
+Retail investors are permitted to do intra-day square-off of their short sale positions.
+
+5. Reporting Requirements
+The brokers shall be mandated to collect the details on scrip-wise short sell positions, collate the data and upload it to the stock exchanges before the commencement of trading on the following trading day. The stock exchanges shall then consolidate such information and disseminate the same on their websites for the information of the public on a weekly basis.

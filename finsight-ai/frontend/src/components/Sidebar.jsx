@@ -1,6 +1,7 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, LineChart, Wallet2, ArrowLeftRight, Settings, Sparkles, PiggyBank } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, LineChart, Wallet2, ArrowLeftRight, Settings, Sparkles, PiggyBank, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { path: '/', icon: Sparkles, label: 'Chat' },
@@ -13,6 +14,16 @@ const navItems = [
 ];
 
 export const Sidebar = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U';
+
   return (
     <aside className="fixed inset-y-0 left-0 z-50 w-[220px] bg-[#111111] text-white flex flex-col h-full">
       {/* Brand */}
@@ -48,17 +59,25 @@ export const Sidebar = () => {
         ))}
       </nav>
 
-      {/* User Profile */}
+      {/* User Profile & Logout */}
       <div className="p-6 mt-auto">
-        <div className="flex items-center gap-3 p-2 rounded-[12px] hover:bg-[#1A1A1A] transition-colors cursor-pointer border border-transparent hover:border-[#1A1A1A]">
-          <div className="w-9 h-9 rounded-full bg-[#1A1A1A] flex items-center justify-center text-xs font-semibold">
-            AS
+        <div className="flex items-center gap-3 p-2 rounded-[12px] bg-[#1A1A1A] mb-3 border border-[#333333]">
+          <div className="w-9 h-9 rounded-full bg-[#111111] flex items-center justify-center text-xs font-semibold">
+            {userInitial}
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">Amaan S.</span>
-            <span className="text-[11px] text-[#6B7280]">0x7F...3a9C</span>
+          <div className="flex flex-col overflow-hidden text-ellipsis">
+            <span className="text-sm font-medium truncate">{user?.email || 'User'}</span>
+            <span className="text-[11px] text-[#6B7280]">Authenticated</span>
           </div>
         </div>
+        
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[12px] text-sm font-medium text-[#EF4444] bg-[#EF4444]/10 hover:bg-[#EF4444]/20 transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign Out</span>
+        </button>
       </div>
     </aside>
   );

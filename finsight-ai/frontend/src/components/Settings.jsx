@@ -3,6 +3,8 @@ import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { User, Bell, KeyRound, Palette, Eye, EyeOff, Check, Copy } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 const TABS = [
   { key: 'profile', label: 'Profile', icon: User },
@@ -34,8 +36,9 @@ function ProfileSection() {
           <input
             id="settings-email"
             type="email"
-            defaultValue="amaan@example.com"
-            className="w-full px-4 py-2.5 rounded-[12px] border border-[#E5E7EB] bg-white text-sm text-[#111111] focus:outline-none focus:border-[#111111] transition-colors"
+            defaultValue={useAuth().user?.email || ''}
+            disabled
+            className="w-full px-4 py-2.5 rounded-[12px] border border-[#E5E7EB] bg-[#F7F8F5] text-sm text-[#6B7280] focus:outline-none transition-colors"
           />
         </div>
         <div>
@@ -69,15 +72,9 @@ function ProfileSection() {
 }
 
 function NotificationsSection() {
-  const [prefs, setPrefs] = useState({
-    priceAlerts: true,
-    ipoAlerts: true,
-    portfolioUpdates: false,
-    sentimentAlerts: false,
-    weeklyReport: true,
-  });
+  const { preferences, updatePreferences } = useTheme();
 
-  const toggle = (key) => setPrefs(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggle = (key) => updatePreferences({ [key]: !preferences[key] });
 
   const items = [
     { key: 'priceAlerts', label: 'Price Alerts', desc: 'Get notified when a stock hits your target price' },
@@ -101,11 +98,11 @@ function NotificationsSection() {
               id={`toggle-${item.key}`}
               onClick={() => toggle(item.key)}
               className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${
-                prefs[item.key] ? 'bg-[#22C55E]' : 'bg-[#E5E7EB]'
+                preferences[item.key] ? 'bg-[#22C55E]' : 'bg-[#E5E7EB]'
               }`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
-                prefs[item.key] ? 'translate-x-5' : 'translate-x-0'
+                preferences[item.key] ? 'translate-x-5' : 'translate-x-0'
               }`} />
             </button>
           </div>
@@ -172,7 +169,7 @@ function APIKeysSection() {
 }
 
 function ThemeSection() {
-  const [theme, setTheme] = useState('light');
+  const { theme, setTheme } = useTheme();
 
   const themes = [
     { key: 'light', label: 'Light', desc: 'Clean, minimal light interface', preview: 'bg-[#F7F8F5] border-[#E5E7EB]' },

@@ -3,13 +3,26 @@
  * Centralized API calls to the FastAPI backend.
  */
 
+import { supabase } from './lib/supabase';
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = { 'Content-Type': 'application/json' };
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+  return headers;
+}
+
 async function fetchJSON(url, options = {}) {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
+    headers: { ...authHeaders, ...options.headers },
   });
+  
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(error.detail || `API Error: ${response.status}`);
@@ -18,11 +31,12 @@ async function fetchJSON(url, options = {}) {
 }
 
 // ── Chat ──────────────────────────────────────────────────
-export async function* streamChat(message, userId = 'default') {
+export async function* streamChat(message) {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/api/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, user_id: userId, stream: true }),
+    headers: authHeaders,
+    body: JSON.stringify({ message, stream: true }),
   });
 
   if (!response.ok) {
@@ -54,10 +68,10 @@ export async function* streamChat(message, userId = 'default') {
   }
 }
 
-export async function sendChat(message, userId = 'default') {
+export async function sendChat(message) {
   return fetchJSON('/api/chat', {
     method: 'POST',
-    body: JSON.stringify({ message, user_id: userId, stream: false }),
+    body: JSON.stringify({ message, stream: false }),
   });
 }
 
@@ -92,32 +106,32 @@ export async function getSIPRecommendation(riskLevel, monthlyAmount, goalYears) 
 }
 
 // ── Portfolio ─────────────────────────────────────────────
-export async function getPortfolio(userId = 'default') {
-  return fetchJSON(`/api/portfolio?user_id=${userId}`);
+export async function getPortfolio() {
+  return fetchJSON(`/api/portfolio`);
 }
 
-export async function buyStock(symbol, quantity, userId = 'default') {
+export async function buyStock(symbol, quantity) {
   return fetchJSON('/api/portfolio/buy', {
     method: 'POST',
-    body: JSON.stringify({ symbol, quantity, user_id: userId }),
+    body: JSON.stringify({ symbol, quantity }),
   });
 }
 
-export async function sellStock(symbol, quantity, userId = 'default') {
+export async function sellStock(symbol, quantity) {
   return fetchJSON('/api/portfolio/sell', {
     method: 'POST',
-    body: JSON.stringify({ symbol, quantity, user_id: userId }),
+    body: JSON.stringify({ symbol, quantity }),
   });
 }
 
-export async function getTransactions(userId = 'default') {
-  return fetchJSON(`/api/portfolio/transactions?user_id=${userId}`);
+export async function getTransactions(limit = 50) {
+  return fetchJSON(`/api/portfolio/transactions?limit=${limit}`);
 }
 
-export async function resetPortfolio(userId = 'default') {
+export async function resetPortfolio() {
   return fetchJSON('/api/portfolio/reset', {
     method: 'POST',
-    body: JSON.stringify({ user_id: userId }),
+    body: JSON.stringify({}),
   });
 }
 

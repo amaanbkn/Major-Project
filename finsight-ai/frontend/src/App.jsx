@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import Chat from './components/Chat';
 import Dashboard from './components/Dashboard';
@@ -8,27 +8,51 @@ import SIPAdvisor from './components/SIPAdvisor';
 import Settings from './components/Settings';
 import Transactions from './components/Transactions';
 import Market from './components/Market';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 
-export default function App() {
+function ProtectedRoute({ children }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" />;
+  
   return (
     <div className="flex h-screen bg-[#F7F8F5] overflow-hidden">
       <Sidebar />
-      
-      {/* Main content - subtract sidebar width and add padding */}
       <main className="flex-1 ml-[220px] h-full overflow-y-auto overflow-x-hidden p-[28px] md:px-[32px] md:py-[28px] max-w-[1100px] mx-auto w-full">
         <div className="animate-in fade-in duration-200 h-full">
-          <Routes>
-            <Route path="/" element={<Chat />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/market" element={<Market />} />
-            <Route path="/portfolio" element={<Portfolio />} />
-            <Route path="/transactions" element={<Transactions />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/sip" element={<SIPAdvisor />} />
-            <Route path="/ipo" element={<IPOTracker />} />
-          </Routes>
+          {children}
         </div>
       </main>
     </div>
+  );
+}
+
+function PublicRoute({ children }) {
+  const { user } = useAuth();
+  if (user) return <Navigate to="/" />;
+  return children;
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+          
+          <Route path="/" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/market" element={<ProtectedRoute><Market /></ProtectedRoute>} />
+          <Route path="/portfolio" element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
+          <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/sip" element={<ProtectedRoute><SIPAdvisor /></ProtectedRoute>} />
+          <Route path="/ipo" element={<ProtectedRoute><IPOTracker /></ProtectedRoute>} />
+        </Routes>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
