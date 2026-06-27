@@ -5,18 +5,7 @@ import { ArrowUpRight, ArrowDownRight, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from './ui/Button';
 import { getTransactions } from '../api';
 
-const MOCK_TRANSACTIONS = [
-  { symbol: 'RELIANCE', action: 'BUY', quantity: 10, price: 2940.00, total: 29400.00, timestamp: '2026-05-16 10:45:00' },
-  { symbol: 'INFY', action: 'SELL', quantity: 25, price: 1650.00, total: 41250.00, timestamp: '2026-05-16 10:30:00' },
-  { symbol: 'TCS', action: 'BUY', quantity: 5, price: 4050.00, total: 20250.00, timestamp: '2026-05-15 14:22:00' },
-  { symbol: 'HDFCBANK', action: 'BUY', quantity: 30, price: 1420.10, total: 42603.00, timestamp: '2026-05-15 11:10:00' },
-  { symbol: 'WIPRO', action: 'SELL', quantity: 50, price: 480.25, total: 24012.50, timestamp: '2026-05-14 15:15:00' },
-  { symbol: 'TATAMOTORS', action: 'BUY', quantity: 20, price: 950.30, total: 19006.00, timestamp: '2026-05-14 09:45:00' },
-  { symbol: 'SBIN', action: 'BUY', quantity: 40, price: 780.50, total: 31220.00, timestamp: '2026-05-13 12:30:00' },
-  { symbol: 'ADANIENT', action: 'SELL', quantity: 15, price: 3250.75, total: 48761.25, timestamp: '2026-05-13 10:00:00' },
-  { symbol: 'ICICIBANK', action: 'BUY', quantity: 35, price: 1120.00, total: 39200.00, timestamp: '2026-05-12 14:50:00' },
-  { symbol: 'BAJFINANCE', action: 'SELL', quantity: 8, price: 7120.00, total: 56960.00, timestamp: '2026-05-12 11:20:00' },
-];
+
 
 function formatTimestamp(ts) {
   try {
@@ -44,15 +33,10 @@ export default function Transactions() {
     setError('');
     try {
       const data = await getTransactions();
-      if (data.transactions && data.transactions.length > 0) {
-        setTransactions(data.transactions);
-      } else {
-        // Fallback to mock data when no real transactions exist
-        setTransactions(MOCK_TRANSACTIONS);
-      }
-    } catch {
-      // API unavailable — use mock data
-      setTransactions(MOCK_TRANSACTIONS);
+      setTransactions(data.transactions || []);
+    } catch (err) {
+      setError(err.message || 'Failed to fetch transaction history from server.');
+      setTransactions([]);
     }
     setLoading(false);
   }

@@ -5,60 +5,9 @@ import { Button } from './ui/Button';
 import { useCountUp } from '../hooks/useCountUp';
 import { ArrowUpRight, ArrowDownRight, Loader2, Activity, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { getNifty50, getMarketSentiment } from '../api';
+import { getNifty50, getMarketSentiment, getNiftyHistory } from '../api';
 
-const MOCK_INDEX = {
-  value: 22450,
-  change: 268.5,
-  change_pct: 1.21,
-  prev_close: 22181.5,
-};
 
-const MOCK_STOCKS = [
-  { symbol: 'RELIANCE', price: 2950.45, change: 68.2, change_pct: 2.37 },
-  { symbol: 'TCS', price: 4100.00, change: 72.5, change_pct: 1.80 },
-  { symbol: 'HDFCBANK', price: 1420.10, change: -17.3, change_pct: -1.20 },
-  { symbol: 'INFY', price: 1650.75, change: -8.3, change_pct: -0.50 },
-  { symbol: 'ICICIBANK', price: 1120.30, change: 25.1, change_pct: 2.29 },
-  { symbol: 'HINDUNILVR', price: 2340.00, change: -32.5, change_pct: -1.37 },
-  { symbol: 'SBIN', price: 780.50, change: 18.9, change_pct: 2.48 },
-  { symbol: 'BHARTIARTL', price: 1560.25, change: 42.3, change_pct: 2.79 },
-  { symbol: 'KOTAKBANK', price: 1780.40, change: -22.1, change_pct: -1.23 },
-  { symbol: 'ITC', price: 438.75, change: 5.6, change_pct: 1.29 },
-  { symbol: 'LT', price: 3520.00, change: -45.0, change_pct: -1.26 },
-  { symbol: 'AXISBANK', price: 1050.20, change: 15.8, change_pct: 1.53 },
-  { symbol: 'WIPRO', price: 480.25, change: -6.5, change_pct: -1.33 },
-  { symbol: 'BAJFINANCE', price: 7120.00, change: 98.5, change_pct: 1.40 },
-  { symbol: 'TATAMOTORS', price: 950.30, change: -12.1, change_pct: -1.26 },
-  { symbol: 'MARUTI', price: 12450.50, change: 185.0, change_pct: 1.51 },
-];
-
-const MOCK_SENTIMENT = {
-  overall_score: 0.35,
-  overall_label: 'BULLISH',
-  sources: {
-    economic_times: { score: 0.4, weight: 0.4 },
-    moneycontrol: { score: 0.35, weight: 0.4 },
-    reddit: { score: 0.2, weight: 0.2 },
-  },
-};
-
-const MOCK_CHART_DATA = [
-  { time: '09:15', value: 22181 },
-  { time: '09:30', value: 22195 },
-  { time: '10:00', value: 22150 },
-  { time: '10:30', value: 22220 },
-  { time: '11:00', value: 22280 },
-  { time: '11:30', value: 22260 },
-  { time: '12:00', value: 22310 },
-  { time: '12:30', value: 22290 },
-  { time: '13:00', value: 22350 },
-  { time: '13:30', value: 22380 },
-  { time: '14:00', value: 22360 },
-  { time: '14:30', value: 22400 },
-  { time: '15:00', value: 22430 },
-  { time: '15:30', value: 22450 },
-];
 
 function getSentimentColor(label) {
   if (!label) return '#6B7280';
@@ -89,17 +38,20 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function Market() {
-  const [indexData, setIndexData] = useState(MOCK_INDEX);
-  const [stocks, setStocks] = useState(MOCK_STOCKS);
-  const [sentiment, setSentiment] = useState(MOCK_SENTIMENT);
-  const [chartData] = useState(MOCK_CHART_DATA);
+  const [indexData, setIndexData] = useState({ value: 0, change: 0, change_pct: 0 });
+  const [stocks, setStocks] = useState([]);
+  const [sentiment, setSentiment] = useState({ overall_score: 0, overall_label: 'NEUTRAL', sources: {} });
+  const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [chartLoading, setChartLoading] = useState(false);
   const [timeRange, setTimeRange] = useState('1D');
+  const [error, setError] = useState(null);
 
   const niftyValue = useCountUp(indexData.value || 0);
 
   async function fetchData() {
     setLoading(true);
+    setError(null);
     try {
       const [niftyRes, sentRes] = await Promise.allSettled([
         getNifty50(),
@@ -107,23 +59,55 @@ export default function Market() {
       ]);
 
       if (niftyRes.status === 'fulfilled' && niftyRes.value) {
-        if (niftyRes.value.index) setIndexData(niftyRes.value.index);
-        if (niftyRes.value.stocks && niftyRes.value.stocks.length > 0) {
-          setStocks(niftyRes.value.stocks);
+        if (niftyRes.value.status === 'error') {
+          setError(niftyRes.value.error);
+        } else {
+          if (niftyRes.value.index) setIndexData(niftyRes.value.index);
+          if (niftyRes.value.stocks && niftyRes.value.stocks.length > 0) {
+            setStocks(niftyRes.value.stocks);
+          }
         }
+      } else if (niftyRes.status === 'rejected') {
+        console.error("Nifty 50 API error", niftyRes.reason);
+        setError("Nifty 50 data is temporarily unavailable.");
       }
+
       if (sentRes.status === 'fulfilled' && sentRes.value) {
-        setSentiment(sentRes.value);
+        if (sentRes.value.status === 'error') {
+          console.warn("Sentiment fetch warning:", sentRes.value.error);
+        } else {
+          setSentiment(sentRes.value);
+        }
+      } else if (sentRes.status === 'rejected') {
+        console.error("Sentiment API error", sentRes.reason);
       }
-    } catch {
-      // Keep mock data on failure
+    } catch (err) {
+      setError("Failed to load market data.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  }
+
+  async function fetchHistory(range) {
+    setChartLoading(true);
+    try {
+      const apiPeriod = range.toLowerCase();
+      const history = await getNiftyHistory(apiPeriod);
+      setChartData(history || []);
+    } catch (err) {
+      console.error("Failed to fetch Nifty index history", err);
+    } finally {
+      setChartLoading(false);
+    }
   }
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    fetchHistory(timeRange);
+  }, [timeRange]);
 
   const gainers = [...stocks]
     .filter(s => (s.change_pct || s.changePct || 0) > 0)
@@ -155,6 +139,12 @@ export default function Market() {
           Refresh
         </Button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-[12px] text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Top Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -235,7 +225,12 @@ export default function Market() {
             ))}
           </div>
         </div>
-        <div className="h-[300px] w-full">
+        <div className="h-[300px] w-full relative">
+          {chartLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-10 rounded-[8px]">
+              <Loader2 className="w-8 h-8 animate-spin text-[#111111]" />
+            </div>
+          )}
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
               <defs>

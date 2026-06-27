@@ -5,14 +5,16 @@ from jose import jwt, JWTError
 
 security = HTTPBearer()
 
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "super-secret-jwt-token-with-at-least-32-characters-long")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not SUPABASE_JWT_SECRET or SUPABASE_JWT_SECRET == "super-secret-jwt-token-with-at-least-32-characters-long":
-        # Fallback for development if no secret is set
-        return "default"
-
     token = credentials.credentials
+    if not SUPABASE_JWT_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="SUPABASE_JWT_SECRET is not configured on the server."
+        )
+
     try:
         payload = jwt.decode(
             token,

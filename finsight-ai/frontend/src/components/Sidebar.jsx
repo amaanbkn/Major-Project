@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, LineChart, Wallet2, ArrowLeftRight, Settings, Sparkles, PiggyBank, LogOut } from 'lucide-react';
+import { LayoutDashboard, LineChart, Wallet2, ArrowLeftRight, Settings, Sparkles, PiggyBank, LogOut, Database } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
@@ -10,7 +10,8 @@ const navItems = [
   { path: '/portfolio', icon: Wallet2, label: 'Wallet' },
   { path: '/sip', icon: PiggyBank, label: 'SIP Advisor' },
   { path: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
-  { path: '/settings', icon: Settings, label: 'Settings' }
+  { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/admin', icon: Database, label: 'Admin RAG' }
 ];
 
 export const Sidebar = () => {

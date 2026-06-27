@@ -82,6 +82,12 @@ def _init_sqlite():
         -- Seed default balance if not exists
         INSERT OR IGNORE INTO virtual_balance (user_id, balance)
         VALUES ('default', 100000.0);
+
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id     TEXT PRIMARY KEY DEFAULT 'default',
+            display_name TEXT DEFAULT 'Amaan Siddiqui',
+            updated_at  TEXT DEFAULT (datetime('now'))
+        );
     """)
 
     conn.commit()
@@ -121,6 +127,8 @@ from routers.ipo import router as ipo_router
 from routers.sip import router as sip_router
 from routers.portfolio import router as portfolio_router
 from routers.market import router as market_router
+from routers.user import router as user_router
+from routers.rag import router as rag_router
 
 app.include_router(chat_router, prefix="/api", tags=["Chat"])
 app.include_router(signals_router, prefix="/api", tags=["Signals"])
@@ -128,6 +136,8 @@ app.include_router(ipo_router, prefix="/api", tags=["IPO"])
 app.include_router(sip_router, prefix="/api", tags=["SIP"])
 app.include_router(portfolio_router, prefix="/api", tags=["Portfolio"])
 app.include_router(market_router, prefix="/api", tags=["Market"])
+app.include_router(user_router, prefix="/api", tags=["User"])
+app.include_router(rag_router, prefix="/api", tags=["RAG"])
 
 
 # ── Health Check ─────────────────────────────────────────────

@@ -7,6 +7,9 @@ import { StockCard } from './StockCard';
 import { SentimentBar } from './SentimentBar';
 import { NewsCard } from './NewsCard';
 import { getNifty50, getMarketSentiment } from '../api';
+import { supabase } from '../lib/supabase';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 const initialMessages = [
   {
@@ -100,10 +103,16 @@ export default function Chat() {
       let buffer = '';
       let stepList = [];
 
-      const response = await fetch('/api/chat', {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: currentInput, user_id: 'default', stream: true }),
+        headers: headers,
+        body: JSON.stringify({ message: currentInput, stream: true }),
       });
 
       if (!response.ok) {

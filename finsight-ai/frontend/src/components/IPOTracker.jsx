@@ -3,12 +3,43 @@ import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Loader2 } from 'lucide-react';
-import { getIPOs, getGMPData } from '../api';
+import { getIPOs, getGMPData, analyzeIPO } from '../api';
 
 export default function IPOTracker() {
   const [ipos, setIpos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [analyzingName, setAnalyzingName] = useState(null);
+  const [analysisText, setAnalysisText] = useState('');
+  const [selectedIpo, setSelectedIpo] = useState(null);
+
+  const handleAnalyze = async (ipo) => {
+    setAnalyzingName(ipo.name);
+    setAnalysisText('');
+    try {
+      const res = await analyzeIPO({
+        name: ipo.name,
+        band: ipo.price_band || ipo.band || 'TBA',
+        gmp: ipo.gmp || 'N/A',
+        estListing: ipo.estListing || 'N/A',
+        open: ipo.open_date || ipo.open || 'TBA',
+        close: ipo.close_date || ipo.close || 'TBA',
+        subscription: parseFloat(ipo.subscription) || 0.0,
+        sector: ipo.sector || 'Various'
+      });
+      if (res && res.analysis) {
+        setAnalysisText(res.analysis);
+      } else {
+        setAnalysisText("Could not generate analysis.");
+      }
+      setSelectedIpo(ipo);
+    } catch (err) {
+      setAnalysisText(err.message || "Failed to analyze IPO.");
+      setSelectedIpo(ipo);
+    } finally {
+      setAnalyzingName(null);
+    }
+  };
 
   useEffect(() => {
     async function fetchIPOData() {
@@ -140,13 +171,60 @@ export default function IPOTracker() {
                     ></div>
                   </div>
                   
-                  <Button variant="primary" className="w-full">
-                    Analyse with AI
+                  <Button 
+                    variant="primary" 
+                    className="w-full flex items-center justify-center gap-1.5"
+                    disabled={analyzingName !== null}
+                    onClick={() => handleAnalyze(ipo)}
+                  >
+                    {analyzingName === ipo.name ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      'Analyse with AI'
+                    )}
                   </Button>
                 </div>
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* AI Analysis Modal */}
+      {selectedIpo && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <Card className="w-full max-w-[650px] max-h-[85vh] flex flex-col p-0 overflow-hidden shadow-2xl border-none animate-in slide-in-from-bottom-4 duration-300">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-[#E5E7EB] bg-white flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="text-lg font-bold text-[#111111]">AI In-depth Analysis</h3>
+                <p className="text-xs text-[#6B7280] mt-0.5">Evaluating IPO for {selectedIpo.name}</p>
+              </div>
+              <button 
+                onClick={() => { setSelectedIpo(null); setAnalysisText(''); }}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F3F4F6] text-[#6B7280] transition-colors cursor-pointer text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <div className="flex-1 p-6 overflow-y-auto bg-[#F7F8F5] text-sm leading-relaxed text-[#111111] border-b border-[#E5E7EB]">
+              <div className="prose prose-sm max-w-none whitespace-pre-wrap font-sans text-gray-800">
+                {analysisText}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-white flex justify-end shrink-0">
+              <Button variant="primary" onClick={() => { setSelectedIpo(null); setAnalysisText(''); }}>
+                Close Analysis
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>

@@ -1,7 +1,6 @@
 """
 FinSight AI — Sentiment Analysis Service
-Weighted multi-source sentiment: ET RSS (40%) + Moneycontrol RSS (40%) + Reddit PRAW (20%)
-Reddit filter: r/IndiaInvestments, upvote_ratio > 0.85, top 5 posts only
+Weighted multi-source sentiment: ET RSS (50%) + Moneycontrol RSS (50%)
 """
 
 import asyncio
@@ -129,65 +128,10 @@ async def _fetch_rss_sentiment(source_name: str, urls: list[str]) -> dict:
     }
 
 
-async def _fetch_reddit_sentiment() -> dict:
-    """
-    Fetch sentiment from r/IndiaInvestments via PRAW.
-    Filter: upvote_ratio > 0.85, top 5 posts only.
-    """
-    try:
-        import praw
-
-        reddit = praw.Reddit(
-            client_id=os.getenv("REDDIT_CLIENT_ID", ""),
-            client_secret=os.getenv("REDDIT_CLIENT_SECRET", ""),
-            user_agent=os.getenv("REDDIT_USER_AGENT", "FinSightAI/1.0"),
-        )
-
-        subreddit = reddit.subreddit("IndiaInvestments")
-        posts = []
-        scores = []
-
-        hot_posts = await asyncio.to_thread(
-            lambda: list(subreddit.hot(limit=20))
-        )
-
-        for post in hot_posts:
-            if post.upvote_ratio > 0.85 and not post.stickied:
-                combined_text = f"{post.title} {post.selftext[:500]}"
-                score = _analyze_text_sentiment(combined_text)
-                scores.append(score)
-                posts.append({
-                    "title": post.title,
-                    "link": f"https://reddit.com{post.permalink}",
-                    "score": post.score,
-                    "upvote_ratio": post.upvote_ratio,
-                    "sentiment_score": score,
-                    "source": "reddit",
-                })
-                if len(posts) >= 5:
-                    break
-
-        avg_score = round(sum(scores) / len(scores), 3) if scores else 0.0
-
-        return {
-            "source": "reddit_india_investments",
-            "avg_score": avg_score,
-            "post_count": len(posts),
-            "posts": posts,
-        }
-
-    except ImportError:
-        logger.warning("PRAW not installed. Skipping Reddit sentiment.")
-        return {"source": "reddit_india_investments", "avg_score": 0.0, "post_count": 0, "posts": []}
-    except Exception as e:
-        logger.error(f"Reddit sentiment fetch failed: {e}")
-        return {"source": "reddit_india_investments", "avg_score": 0.0, "post_count": 0, "posts": [], "error": str(e)}
-
-
 async def get_market_sentiment(symbol: Optional[str] = None) -> dict:
     """
     Get weighted market sentiment from all sources.
-    Weights: Economic Times RSS (40%) + Moneycontrol RSS (40%) + Reddit (20%)
+    Weights: Economic Times RSS (50%) + Moneycontrol RSS (50%)
     Uses 15-min cache to avoid excessive requests.
     """
     cache_key = symbol or "market_general"
@@ -204,18 +148,16 @@ async def get_market_sentiment(symbol: Optional[str] = None) -> dict:
     # Fetch all sources concurrently
     et_task = _fetch_rss_sentiment("economic_times", RSS_FEEDS["economic_times"])
     mc_task = _fetch_rss_sentiment("moneycontrol", RSS_FEEDS["moneycontrol"])
-    reddit_task = _fetch_reddit_sentiment()
 
-    et_result, mc_result, reddit_result = await asyncio.gather(
-        et_task, mc_task, reddit_task
+    et_result, mc_result = await asyncio.gather(
+        et_task, mc_task
     )
 
     # Weighted composite score
-    # ET: 40%, Moneycontrol: 40%, Reddit: 20%
+    # ET: 50%, Moneycontrol: 50%
     weighted_score = round(
-        (et_result["avg_score"] * 0.40)
-        + (mc_result["avg_score"] * 0.40)
-        + (reddit_result["avg_score"] * 0.20),
+        (et_result["avg_score"] * 0.50)
+        + (mc_result["avg_score"] * 0.50),
         3,
     )
 
@@ -237,18 +179,13 @@ async def get_market_sentiment(symbol: Optional[str] = None) -> dict:
         "sources": {
             "economic_times": {
                 "score": et_result["avg_score"],
-                "weight": 0.40,
+                "weight": 0.50,
                 "articles": et_result.get("articles", []),
             },
             "moneycontrol": {
                 "score": mc_result["avg_score"],
-                "weight": 0.40,
+                "weight": 0.50,
                 "articles": mc_result.get("articles", []),
-            },
-            "reddit": {
-                "score": reddit_result["avg_score"],
-                "weight": 0.20,
-                "posts": reddit_result.get("posts", []),
             },
         },
         "timestamp": datetime.now().isoformat(),

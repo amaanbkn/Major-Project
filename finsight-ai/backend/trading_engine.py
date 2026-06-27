@@ -31,11 +31,19 @@ async def get_portfolio(user_id: str = "default") -> dict:
     """
     conn = _get_conn()
     try:
-        # Get balance
+        # Get balance and auto-initialize if it doesn't exist
         row = conn.execute(
             "SELECT balance FROM virtual_balance WHERE user_id = ?", (user_id,)
         ).fetchone()
-        balance = row["balance"] if row else 100000.0
+        if not row:
+            conn.execute(
+                "INSERT OR IGNORE INTO virtual_balance (user_id, balance) VALUES (?, 100000.0)",
+                (user_id,)
+            )
+            conn.commit()
+            balance = 100000.0
+        else:
+            balance = row["balance"]
 
         # Get holdings
         holdings_rows = conn.execute(

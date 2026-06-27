@@ -104,7 +104,7 @@ async def orchestrate(query: str, user_id: str = "default") -> OrchestratorResul
     # Market sentiment intent
     elif intent_type == "market_sentiment":
         tasks.append(("get_sentiment", _tool_get_sentiment()))
-        result.add_step("📰 Fetching sentiment from ET, Moneycontrol, Reddit...")
+        result.add_step("📰 Fetching sentiment from ET and Moneycontrol...")
         tasks.append(("get_nifty", _tool_get_nifty()))
         result.add_step("📊 Fetching NIFTY 50 index...")
 

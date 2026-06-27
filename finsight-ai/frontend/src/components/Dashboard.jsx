@@ -5,7 +5,7 @@ import { Button } from './ui/Button';
 import { ArrowUpRight, ArrowDownRight, Activity, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useCountUp } from '../hooks/useCountUp';
-import { getNifty50, getMarketSentiment } from '../api';
+import { getNifty50, getMarketSentiment, getNiftyHistory } from '../api';
 
 const StatCard = ({ label, value, change, isPositive, suffix = "", prefix = "", loading = false }) => {
   const animatedValue = useCountUp(typeof value === 'number' && !loading ? value : 0);
@@ -57,16 +57,8 @@ export default function Dashboard() {
   const [sentiment, setSentiment] = useState({ overall_label: "NEUTRAL", overall_score: 0 });
   
   // Fake chart data for now since we don't have historical index API implemented, but we'd normally fetch it
-  const [chartData, setChartData] = useState([
-    { time: '09:15', value: 22100 },
-    { time: '10:00', value: 22150 },
-    { time: '11:00', value: 22080 },
-    { time: '12:00', value: 22200 },
-    { time: '13:00', value: 22190 },
-    { time: '14:00', value: 22350 },
-    { time: '15:00', value: 22400 },
-    { time: '15:30', value: 22450 },
-  ]);
+  const [chartData, setChartData] = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -80,21 +72,6 @@ export default function Dashboard() {
         if (niftyRes.status === 'fulfilled' && niftyRes.value) {
           if (niftyRes.value.index) setIndexData(niftyRes.value.index);
           if (niftyRes.value.stocks) setStocks(niftyRes.value.stocks);
-          
-          // Generate a simplistic intraday chart line based on current value
-          if (niftyRes.value.index?.value) {
-            const val = niftyRes.value.index.value;
-            setChartData([
-              { time: '09:15', value: val * 0.99 },
-              { time: '10:00', value: val * 0.995 },
-              { time: '11:00', value: val * 0.985 },
-              { time: '12:00', value: val * 0.992 },
-              { time: '13:00', value: val * 0.998 },
-              { time: '14:00', value: val * 1.002 },
-              { time: '15:00', value: val * 0.999 },
-              { time: '15:30', value: val },
-            ]);
-          }
         }
         
         if (sentRes.status === 'fulfilled' && sentRes.value) {
@@ -110,6 +87,23 @@ export default function Dashboard() {
     
     fetchData();
   }, []);
+
+  async function fetchHistory(range) {
+    setChartLoading(true);
+    try {
+      const apiPeriod = range.toLowerCase();
+      const history = await getNiftyHistory(apiPeriod);
+      setChartData(history || []);
+    } catch (err) {
+      console.error("Failed to fetch Nifty index history in Dashboard", err);
+    } finally {
+      setChartLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchHistory(timeRange);
+  }, [timeRange]);
 
   const topMovers = stocks
     .sort((a, b) => Math.abs(b.change_pct || 0) - Math.abs(a.change_pct || 0))
@@ -177,7 +171,7 @@ export default function Dashboard() {
         </div>
 
         <div className="h-[300px] w-full">
-          {loading ? (
+          {loading || chartLoading ? (
             <div className="w-full h-full flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-[#E5E7EB]" />
             </div>

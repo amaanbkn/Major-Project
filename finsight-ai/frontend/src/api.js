@@ -125,7 +125,7 @@ export async function sellStock(symbol, quantity) {
 }
 
 export async function getTransactions(limit = 50) {
-  return fetchJSON(`/api/portfolio/transactions?limit=${limit}`);
+  return fetchJSON(`/api/transactions?limit=${limit}`);
 }
 
 export async function resetPortfolio() {
@@ -146,4 +146,51 @@ export async function getNifty50() {
 
 export async function getMarketSentiment() {
   return fetchJSON('/api/market/sentiment');
+}
+
+export async function getNiftyHistory(period = '1d') {
+  return fetchJSON(`/api/market/nifty50/history?period=${period}`);
+}
+
+// ── Settings ──────────────────────────────────────────────
+export async function getSettings() {
+  return fetchJSON('/api/user/settings');
+}
+
+export async function updateSettings(settings) {
+  return fetchJSON('/api/user/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}
+
+// ── RAG Ingestion ─────────────────────────────────────────
+export async function ingestRAG(formData) {
+  const authHeaders = await getAuthHeaders();
+  const headers = { ...authHeaders };
+  delete headers['Content-Type'];
+
+  const response = await fetch(`${API_BASE}/api/rag/ingest`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail || `API Error: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function getRAGStats() {
+  return fetchJSON('/api/rag/stats');
+}
+
+// ── IPO Analysis ──────────────────────────────────────────
+export async function analyzeIPO(ipoData) {
+  return fetchJSON('/api/ipo/analyze', {
+    method: 'POST',
+    body: JSON.stringify(ipoData),
+  });
 }

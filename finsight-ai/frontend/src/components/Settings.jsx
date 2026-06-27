@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
-import { User, Bell, KeyRound, Palette, Eye, EyeOff, Check, Copy } from 'lucide-react';
+import { User, Bell, KeyRound, Palette, Eye, EyeOff, Check, Copy, Loader2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { getSettings, updateSettings } from '../api';
 
 const TABS = [
   { key: 'profile', label: 'Profile', icon: User },
@@ -13,7 +14,18 @@ const TABS = [
   { key: 'theme', label: 'Theme', icon: Palette },
 ];
 
-function ProfileSection() {
+function ProfileSection({ displayName, userId, balance, onSave }) {
+  const [localName, setLocalName] = useState(displayName);
+  const [localBalance, setLocalBalance] = useState(balance);
+
+  useEffect(() => {
+    setLocalName(displayName);
+  }, [displayName]);
+
+  useEffect(() => {
+    setLocalBalance(balance);
+  }, [balance]);
+
   return (
     <Card className="p-6">
       <h3 className="text-lg font-semibold text-[#111111] mb-6">Profile Settings</h3>
@@ -25,7 +37,8 @@ function ProfileSection() {
           <input
             id="settings-display-name"
             type="text"
-            defaultValue="Amaan Siddiqui"
+            value={localName || ''}
+            onChange={(e) => setLocalName(e.target.value)}
             className="w-full px-4 py-2.5 rounded-[12px] border border-[#E5E7EB] bg-white text-sm text-[#111111] focus:outline-none focus:border-[#111111] transition-colors"
           />
         </div>
@@ -36,7 +49,7 @@ function ProfileSection() {
           <input
             id="settings-email"
             type="email"
-            defaultValue={useAuth().user?.email || ''}
+            value={useAuth().user?.email || ''}
             disabled
             className="w-full px-4 py-2.5 rounded-[12px] border border-[#E5E7EB] bg-[#F7F8F5] text-sm text-[#6B7280] focus:outline-none transition-colors"
           />
@@ -48,8 +61,9 @@ function ProfileSection() {
           <input
             id="settings-user-id"
             type="text"
-            defaultValue="default"
-            className="w-full px-4 py-2.5 rounded-[12px] border border-[#E5E7EB] bg-white text-sm text-[#111111] focus:outline-none focus:border-[#111111] transition-colors"
+            value={userId || ''}
+            disabled
+            className="w-full px-4 py-2.5 rounded-[12px] border border-[#E5E7EB] bg-[#F7F8F5] text-sm text-[#6B7280] focus:outline-none transition-colors"
           />
         </div>
         <div>
@@ -59,13 +73,14 @@ function ProfileSection() {
           <input
             id="settings-balance"
             type="number"
-            defaultValue={100000}
+            value={localBalance !== undefined ? localBalance : 100000}
+            onChange={(e) => setLocalBalance(e.target.value)}
             className="w-full px-4 py-2.5 rounded-[12px] border border-[#E5E7EB] bg-white text-sm text-[#111111] focus:outline-none focus:border-[#111111] transition-colors tabular-nums"
           />
         </div>
       </div>
       <div className="mt-6 flex justify-end">
-        <Button variant="primary" size="sm">Save Changes</Button>
+        <Button variant="primary" size="sm" onClick={() => onSave(localName, localBalance)}>Save Changes</Button>
       </div>
     </Card>
   );
@@ -112,7 +127,7 @@ function NotificationsSection() {
   );
 }
 
-function APIKeysSection() {
+function APIKeysSection({ apiKeys = { gemini: 'missing', supabase: 'missing' } }) {
   const [showGemini, setShowGemini] = useState(false);
   const [copied, setCopied] = useState('');
 
@@ -123,9 +138,8 @@ function APIKeysSection() {
   };
 
   const keys = [
-    { key: 'gemini', label: 'Gemini API Key', status: 'configured', masked: 'AIza••••••••••••3xQ' },
-    { key: 'reddit', label: 'Reddit Client ID', status: 'configured', masked: 'f3k••••••••d9' },
-    { key: 'supabase', label: 'Supabase Key', status: 'not_set', masked: '' },
+    { key: 'gemini', label: 'Gemini API Key', status: apiKeys.gemini === 'configured' ? 'configured' : 'not_set', masked: apiKeys.gemini === 'configured' ? 'AIza••••••••••••3xQ' : '' },
+    { key: 'supabase', label: 'Supabase Key', status: apiKeys.supabase === 'configured' ? 'configured' : 'not_set', masked: apiKeys.supabase === 'configured' ? 'VITE••••••••••••Key' : '' },
   ];
 
   return (
@@ -210,16 +224,70 @@ function ThemeSection() {
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('profile');
+  const [displayName, setDisplayName] = useState('');
+  const [userId, setUserId] = useState('');
+  const [balance, setBalance] = useState(100000);
+  const [apiKeys, setApiKeys] = useState({ gemini: 'missing', supabase: 'missing' });
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      const res = await getSettings();
+      setDisplayName(res.display_name);
+      setUserId(res.user_id);
+      setBalance(res.balance);
+      setApiKeys(res.api_keys || { gemini: 'missing', supabase: 'missing' });
+    } catch (err) {
+      console.error("Failed to load user settings", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const handleSaveProfile = async (name, newBalance) => {
+    try {
+      setToast({ message: 'Saving settings...', type: 'info' });
+      await updateSettings({ display_name: name, balance: parseFloat(newBalance) });
+      setToast({ message: 'Settings saved successfully!', type: 'success' });
+      setTimeout(() => setToast(null), 3000);
+      fetchSettings();
+    } catch (err) {
+      setToast({ message: err.message || 'Failed to save settings', type: 'error' });
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
 
   const sections = {
-    profile: <ProfileSection />,
+    profile: <ProfileSection displayName={displayName} userId={userId} balance={balance} onSave={handleSaveProfile} />,
     notifications: <NotificationsSection />,
-    apikeys: <APIKeysSection />,
+    apikeys: <APIKeysSection apiKeys={apiKeys} />,
     theme: <ThemeSection />,
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[300px]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#6B7280]" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-6 pb-10">
+    <div className="flex flex-col gap-6 pb-10 relative">
+      {toast && (
+        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white z-50 animate-in fade-in duration-150 ${
+          toast.type === 'error' ? 'bg-red-500' : toast.type === 'success' ? 'bg-green-500' : 'bg-blue-500'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
       <div>
         <h1 className="text-[28px] font-bold text-[#111111] leading-tight">Settings</h1>
         <p className="text-[#6B7280] text-sm mt-1">Manage your account, preferences, and integrations</p>

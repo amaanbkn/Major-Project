@@ -8,6 +8,7 @@ import SIPAdvisor from './components/SIPAdvisor';
 import Settings from './components/Settings';
 import Transactions from './components/Transactions';
 import Market from './components/Market';
+import AdminRAG from './components/AdminRAG';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/sip" element={<ProtectedRoute><SIPAdvisor /></ProtectedRoute>} />
           <Route path="/ipo" element={<ProtectedRoute><IPOTracker /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute><AdminRAG /></ProtectedRoute>} />
         </Routes>
       </AuthProvider>
     </ThemeProvider>

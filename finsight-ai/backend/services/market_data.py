@@ -36,6 +36,8 @@ NIFTY_50_SYMBOLS = [
 def _nse_symbol(symbol: str) -> str:
     """Convert plain symbol to NSE Yahoo Finance ticker."""
     symbol = symbol.upper().strip()
+    if symbol.startswith("^"):
+        return symbol
     if not symbol.endswith(".NS"):
         return f"{symbol}.NS"
     return symbol

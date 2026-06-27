@@ -117,4 +117,12 @@ async def reset_portfolio(request: ResetRequest, current_user: str = Depends(get
     return result
 
 
+@router.get("/transactions")
+async def get_transactions_direct(limit: int = 50, current_user: str = Depends(get_current_user)):
+    """Get transaction history directly under /api/transactions."""
+    from trading_engine import get_transaction_history
+    transactions = await get_transaction_history(current_user, limit)
+    return {"transactions": transactions, "count": len(transactions)}
+
+
 
