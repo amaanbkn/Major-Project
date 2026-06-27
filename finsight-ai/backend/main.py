@@ -3,7 +3,6 @@ FinSight AI — FastAPI Application Entry Point
 LLM-Driven Financial Chatbot for Real-Time Stock Market Analysis
 
 Team: Amaan Siddiqui, Achuta Rao M, Shreejal Dash, Kishan Kumar
-Guide: Mrs. Anjali Vyas, Dept of CSE, DBIT Bengaluru (2025-2026)
 """
 
 import os
