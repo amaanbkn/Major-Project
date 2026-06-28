@@ -80,7 +80,7 @@ export default function IPOTracker() {
         }
 
         setIpos(mergedIpos);
-      } catch (err) {
+      } catch {
         setError("Failed to load IPO data");
       } finally {
         setLoading(false);

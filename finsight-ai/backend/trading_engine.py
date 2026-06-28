@@ -11,13 +11,10 @@ from typing import Optional
 
 from loguru import logger
 
-# ── Singleton SQLite connection ──────────────────────────────
-_db_path = os.getenv("SQLITE_DB_PATH", "./finsight.db")
-
-
 def _get_conn() -> sqlite3.Connection:
-    """Get SQLite connection (Singleton pattern via check_same_thread)."""
-    conn = sqlite3.connect(_db_path, check_same_thread=False)
+    """Get SQLite connection dynamically."""
+    db_path = os.getenv("SQLITE_DB_PATH", "./finsight.db")
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -107,10 +104,11 @@ async def buy_stock(
 
         # Deduct balance
         new_balance = balance - total_cost
-        conn.execute(
-            "UPDATE virtual_balance SET balance = ?, updated_at = datetime('now') WHERE user_id = ?",
-            (new_balance, user_id),
-        )
+        conn.execute("""
+            INSERT INTO virtual_balance (user_id, balance)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET balance = excluded.balance, updated_at = datetime('now')
+        """, (user_id, new_balance))
 
         # Check if already holding this stock
         existing = conn.execute(
@@ -201,10 +199,11 @@ async def sell_stock(
         ).fetchone()
         balance = row["balance"] if row else 100000.0
         new_balance = balance + total_value
-        conn.execute(
-            "UPDATE virtual_balance SET balance = ?, updated_at = datetime('now') WHERE user_id = ?",
-            (new_balance, user_id),
-        )
+        conn.execute("""
+            INSERT INTO virtual_balance (user_id, balance)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET balance = excluded.balance, updated_at = datetime('now')
+        """, (user_id, new_balance))
 
         # Update or remove holding
         new_qty = existing["quantity"] - quantity

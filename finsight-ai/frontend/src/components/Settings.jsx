@@ -128,7 +128,6 @@ function NotificationsSection() {
 }
 
 function APIKeysSection({ apiKeys = { gemini: 'missing', supabase: 'missing' } }) {
-  const [showGemini, setShowGemini] = useState(false);
   const [copied, setCopied] = useState('');
 
   const handleCopy = (key) => {

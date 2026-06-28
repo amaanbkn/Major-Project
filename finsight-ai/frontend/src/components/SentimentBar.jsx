@@ -13,7 +13,6 @@ export const SentimentBar = ({ score = 50 }) => {
   }, [score]);
 
   // Interpolate color from Red (0) to Green (100)
-  const isBullish = score >= 50;
 
   return (
     <Card className="p-5">

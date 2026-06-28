@@ -81,7 +81,7 @@ export default function Market() {
       } else if (sentRes.status === 'rejected') {
         console.error("Sentiment API error", sentRes.reason);
       }
-    } catch (err) {
+    } catch {
       setError("Failed to load market data.");
     } finally {
       setLoading(false);

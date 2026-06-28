@@ -60,7 +60,7 @@ export async function* streamChat(message) {
         try {
           const data = JSON.parse(line.slice(6));
           yield data;
-        } catch (e) {
+        } catch {
           // Skip malformed JSON
         }
       }

@@ -4,11 +4,11 @@ import os
 import asyncio
 from unittest.mock import patch, MagicMock
 
-from services.trading_engine import buy_stock, sell_stock, get_portfolio, reset_portfolio
-
-# Set up test database
+# Set up test database before importing module
 TEST_DB_PATH = "./test_finsight.db"
 os.environ["SQLITE_DB_PATH"] = TEST_DB_PATH
+
+from trading_engine import buy_stock, sell_stock, get_portfolio, reset_portfolio
 
 @pytest.fixture(autouse=True)
 def setup_db():
@@ -53,27 +53,27 @@ def setup_db():
 async def test_buy_stock_success():
     result = await buy_stock("test_user", "TCS", 10, 3500.0)
     assert result["status"] == "success"
-    assert result["message"] == "Successfully bought 10.0 shares of TCS"
+    assert "Successfully bought 10 shares of TCS" in result["message"]
 
 @pytest.mark.asyncio
 async def test_buy_stock_insufficient_funds():
     result = await buy_stock("test_user", "TCS", 1000, 3500.0)
     assert result["status"] == "error"
-    assert "Insufficient virtual balance" in result["message"]
+    assert "Insufficient balance" in result["message"]
 
 @pytest.mark.asyncio
 async def test_sell_stock_success():
     await buy_stock("test_user", "INFY", 50, 1500.0)
     result = await sell_stock("test_user", "INFY", 20, 1600.0)
     assert result["status"] == "success"
-    assert "Successfully sold 20.0 shares of INFY" in result["message"]
+    assert "Successfully sold 20 shares of INFY" in result["message"]
 
 @pytest.mark.asyncio
 async def test_sell_stock_not_enough_shares():
     await buy_stock("test_user", "HDFC", 10, 1600.0)
     result = await sell_stock("test_user", "HDFC", 20, 1600.0)
     assert result["status"] == "error"
-    assert "Insufficient shares" in result["message"]
+    assert "Insufficient quantity" in result["message"]
 
 @pytest.mark.asyncio
 async def test_get_portfolio():

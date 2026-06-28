@@ -118,9 +118,7 @@ class TestRAGRetrieval:
             "distances": [[0.15, 0.32]],
         }
 
-        with patch("services.rag.get_collection", return_value=mock_collection), \
-             patch("services.rag.get_embedding", new_callable=AsyncMock, return_value=[0.1] * 768):
-
+        with patch("services.rag.get_collection", return_value=mock_collection):
             # Need to re-patch get_embedding inside rag module
             with patch("services.gemini.get_embedding", new_callable=AsyncMock, return_value=[0.1] * 768):
                 from services.rag import retrieve_relevant
