@@ -1,5 +1,5 @@
 # ============================================================
-# FinSight AI — Backend Dependencies
+# FinSight AI — Python Dependencies
 # ============================================================
 
 # Web framework & Server
