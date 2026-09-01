@@ -8,8 +8,11 @@ import { SentimentBar } from './SentimentBar';
 import { NewsCard } from './NewsCard';
 import { getNifty50, getMarketSentiment } from '../api';
 import { supabase } from '../lib/supabase';
+import ReactMarkdown from 'react-markdown';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+console.log('[Chat] API_BASE:', API_BASE);
+console.log('[Chat] Chat endpoint:', `${API_BASE}/api/chat`);
 
 const initialMessages = [
   {
@@ -77,20 +80,20 @@ export default function Chat() {
     fetchSidebarData();
   }, []);
 
-  const handleSend = async (e) => {
+  const handleSend = async (e, customMessage = null) => {
     e?.preventDefault();
-    if (!inputValue.trim() || isTyping) return;
+    const messageText = (customMessage !== null ? customMessage : inputValue).trim();
+    if (!messageText || isTyping) return;
     
     // Add user message
     const userMsg = {
       id: Date.now(),
       role: 'user',
-      content: inputValue,
+      content: messageText,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     
     setMessages(prev => [...prev, userMsg]);
-    const currentInput = inputValue;
     setInputValue('');
     setIsTyping(true);
     setIsStreaming(true);
@@ -105,14 +108,14 @@ export default function Chat() {
 
       const { data: { session } } = await supabase.auth.getSession();
       const headers = { 'Content-Type': 'application/json' };
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
+      // Fall back to mock token in dev mode when Supabase is not configured
+      const token = session?.access_token || 'mock_jwt_token';
+      headers['Authorization'] = `Bearer ${token}`;
 
       const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({ message: currentInput, stream: true }),
+        body: JSON.stringify({ message: messageText, stream: true }),
       });
 
       if (!response.ok) {
@@ -128,11 +131,12 @@ export default function Chat() {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop();
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const jsonStr = line.slice(6).trim();
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const jsonStr = trimmed.replace(/^data:\s*/, '').trim();
           if (!jsonStr) continue;
 
           try {
@@ -152,7 +156,7 @@ export default function Chat() {
               setMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 role: 'assistant',
-                content: fullText || 'No response received.',
+                content: fullText || 'Analysis complete.',
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 steps: stepList.length > 0 ? stepList : null,
               }] );
@@ -168,7 +172,7 @@ export default function Chat() {
               setMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 role: 'assistant',
-                content: 'Something went wrong. Please try again.',
+                content: event.content || 'Something went wrong. Please try again.',
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 steps: null,
               }] );
@@ -183,6 +187,26 @@ export default function Chat() {
           }
         }
       }
+
+      // Fallback in case stream ended without explicit 'done' event
+      if (fullText && fullText.trim()) {
+        setMessages(prev => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === fullText) {
+            return prev;
+          }
+          return [...prev, {
+            id: Date.now() + 1,
+            role: 'assistant',
+            content: fullText,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            steps: stepList.length > 0 ? stepList : null,
+          }];
+        });
+        setStreamingText('');
+        setIsStreaming(false);
+        setIsTyping(false);
+      }
     } catch (networkErr) {
        console.error('Network error:', networkErr);
        setIsTyping(false);
@@ -191,7 +215,7 @@ export default function Chat() {
         {
           id: Date.now() + 1,
           role: 'assistant',
-          content: 'Could not connect to server.',
+          content: 'Could not connect to server: ' + (networkErr.message || ''),
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           steps: null
         }
@@ -203,11 +227,7 @@ export default function Chat() {
   };
 
   const handleQuickAction = (text) => {
-    setInputValue(text);
-    // Use a tiny timeout to ensure state updates before sending
-    setTimeout(() => {
-      handleSend();
-    }, 10);
+    handleSend(null, text);
   };
 
   return (
@@ -249,9 +269,13 @@ export default function Chat() {
                   px-4 py-3 text-[14px] leading-relaxed shadow-sm
                   ${msg.role === 'user' 
                     ? 'bg-[#111111] text-white rounded-[16px_16px_4px_16px]' 
-                    : 'bg-[#F7F8F5] text-[#111111] rounded-[16px_16px_16px_4px]'}
+                    : 'bg-[#F7F8F5] text-[#111111] rounded-[16px_16px_16px_4px] prose prose-sm max-w-none prose-headings:font-bold prose-headings:my-2 prose-p:my-1 prose-table:my-2 prose-th:p-2 prose-td:p-2 prose-table:border prose-th:border prose-td:border prose-th:bg-[#E5E7EB]'}
                 `}>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.role === 'user' ? (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  ) : (
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  )}
                 </div>
               </div>
               
@@ -298,11 +322,9 @@ export default function Chat() {
                 <div className="w-7 h-7 rounded-full bg-[#111111] flex flex-shrink-0 items-center justify-center mt-1">
                   <span className="text-white font-bold text-xs">F</span>
                 </div>
-                <div className="px-4 py-3 text-[14px] leading-relaxed bg-[#F7F8F5] text-[#111111] rounded-[16px_16px_16px_4px] shadow-sm">
-                  <p className="whitespace-pre-wrap">
-                    {streamingText}
-                    <span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-[#111111] animate-blink"></span>
-                  </p>
+                <div className="px-4 py-3 text-[14px] leading-relaxed bg-[#F7F8F5] text-[#111111] rounded-[16px_16px_16px_4px] shadow-sm prose prose-sm max-w-none">
+                  <ReactMarkdown>{streamingText}</ReactMarkdown>
+                  <span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-[#111111] animate-blink"></span>
                 </div>
               </div>
             </div>

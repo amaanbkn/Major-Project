@@ -10,9 +10,9 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 async function getAuthHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
   const headers = { 'Content-Type': 'application/json' };
-  if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
-  }
+  // Use session token, or fall back to mock_jwt_token in dev mode (Supabase not configured)
+  const token = session?.access_token || 'mock_jwt_token';
+  headers['Authorization'] = `Bearer ${token}`;
   return headers;
 }
 

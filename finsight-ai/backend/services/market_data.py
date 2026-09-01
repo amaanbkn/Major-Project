@@ -43,6 +43,22 @@ def _nse_symbol(symbol: str) -> str:
     return symbol
 
 
+import math
+
+
+def _safe_float(val, default=0.0) -> float:
+    """Safely convert value to float, replacing NaN and Infinity with default."""
+    try:
+        if val is None or pd.isna(val):
+            return default
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+    except (ValueError, TypeError):
+        return default
+
+
 async def get_stock_price(symbol: str) -> dict:
     """
     Fetch current/latest stock price data for a given symbol.
@@ -65,35 +81,33 @@ async def get_stock_price(symbol: str) -> dict:
 
         fast_info, info = await asyncio.to_thread(_fetch_info)
 
-        price = (
+        price = _safe_float(
             fast_info.get("last_price")
             or fast_info.get("previous_close")
             or info.get("currentPrice")
             or info.get("regularMarketPrice")
-            or 0
         )
-        prev_close = (
+        prev_close = _safe_float(
             fast_info.get("previous_close")
             or info.get("previousClose")
             or info.get("regularMarketPreviousClose")
-            or 0
         )
-        change = round(price - prev_close, 2) if price and prev_close else 0
-        change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
+        change = round(price - prev_close, 2) if price and prev_close else 0.0
+        change_pct = round((change / prev_close) * 100, 2) if prev_close else 0.0
 
         return {
             "symbol": symbol.upper().replace(".NS", ""),
             "price": price,
             "previous_close": prev_close,
-            "change": change,
-            "change_pct": change_pct,
-            "volume": int(fast_info.get("volume") or info.get("volume", 0) or 0),
-            "day_high": round(float(info.get("dayHigh", 0) or 0), 2),
-            "day_low": round(float(info.get("dayLow", 0) or 0), 2),
-            "52w_high": round(float(info.get("fiftyTwoWeekHigh", 0) or 0), 2),
-            "52w_low": round(float(info.get("fiftyTwoWeekLow", 0) or 0), 2),
-            "market_cap": int(info.get("marketCap", 0) or 0),
-            "pe_ratio": round(float(info.get("trailingPE", 0) or 0), 2),
+            "change": _safe_float(change),
+            "change_pct": _safe_float(change_pct),
+            "volume": int(_safe_float(fast_info.get("volume") or info.get("volume"))),
+            "day_high": round(_safe_float(info.get("dayHigh")), 2),
+            "day_low": round(_safe_float(info.get("dayLow")), 2),
+            "52w_high": round(_safe_float(info.get("fiftyTwoWeekHigh")), 2),
+            "52w_low": round(_safe_float(info.get("fiftyTwoWeekLow")), 2),
+            "market_cap": int(_safe_float(info.get("marketCap"))),
+            "pe_ratio": round(_safe_float(info.get("trailingPE")), 2),
             "timestamp": datetime.now().isoformat(),
             "status": "success",
         }
@@ -101,7 +115,7 @@ async def get_stock_price(symbol: str) -> dict:
         logger.error(f"Error fetching price for {symbol}: {e}")
         return {
             "symbol": symbol.upper(),
-            "price": 0,
+            "price": 0.0,
             "status": "error",
             "error": str(e),
         }
@@ -129,13 +143,16 @@ async def get_stock_history(
         df = df.reset_index()
         records = []
         for _, row in df.iterrows():
+            close_val = _safe_float(row["Close"])
+            if close_val == 0.0 and pd.isna(row["Close"]):
+                continue
             records.append({
                 "date": row["Date"].isoformat() if hasattr(row["Date"], "isoformat") else str(row["Date"]),
-                "open": round(row["Open"], 2),
-                "high": round(row["High"], 2),
-                "low": round(row["Low"], 2),
-                "close": round(row["Close"], 2),
-                "volume": int(row["Volume"]),
+                "open": round(_safe_float(row["Open"]), 2),
+                "high": round(_safe_float(row["High"]), 2),
+                "low": round(_safe_float(row["Low"]), 2),
+                "close": round(close_val, 2),
+                "volume": int(_safe_float(row["Volume"])),
             })
         return records
     except Exception as e:
@@ -212,21 +229,21 @@ async def get_nifty50_snapshot() -> list[dict]:
                 if len(ticker_data) >= 2:
                     latest = ticker_data.iloc[-1]
                     prev = ticker_data.iloc[-2]
-                    price = round(float(latest["Close"]), 2)
-                    prev_close = round(float(prev["Close"]), 2)
-                    change = round(price - prev_close, 2)
-                    change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
+                    price = round(_safe_float(latest["Close"]), 2)
+                    prev_close = round(_safe_float(prev["Close"]), 2)
+                    change = round(price - prev_close, 2) if price and prev_close else 0.0
+                    change_pct = round((change / prev_close) * 100, 2) if prev_close else 0.0
                 else:
                     latest = ticker_data.iloc[-1]
-                    price = round(float(latest["Close"]), 2)
-                    change = 0
-                    change_pct = 0
+                    price = round(_safe_float(latest["Close"]), 2)
+                    change = 0.0
+                    change_pct = 0.0
 
                 snapshot.append({
                     "symbol": sym,
-                    "price": price,
-                    "change": change,
-                    "change_pct": change_pct,
+                    "price": _safe_float(price),
+                    "change": _safe_float(change),
+                    "change_pct": _safe_float(change_pct),
                 })
             except Exception as e:
                 logger.warning(f"Skipping {sym} in NIFTY50 snapshot: {e}")
