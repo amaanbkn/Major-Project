@@ -66,8 +66,8 @@ const StatCard = ({
           {change !== undefined && !loading && (
             <div
               className={`flex items-center gap-0.5 px-2 py-1 rounded-[6px] ${isPositive
-                  ? 'bg-[#22C55E]/10 text-[#22C55E]'
-                  : 'bg-[#EF4444]/10 text-[#EF4444]'
+                ? 'bg-[#22C55E]/10 text-[#22C55E]'
+                : 'bg-[#EF4444]/10 text-[#EF4444]'
                 }`}
             >
               {isPositive ? (
@@ -519,8 +519,8 @@ export default function Dashboard() {
                   setTimeRange(range)
                 }
                 className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${timeRange === range
-                    ? 'bg-[#111111] text-white'
-                    : 'bg-transparent border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F3F4F6]'
+                  ? 'bg-[#111111] text-white'
+                  : 'bg-transparent border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F3F4F6]'
                   }`}
               >
                 {range}
@@ -785,8 +785,8 @@ export default function Dashboard() {
 
                       <td
                         className={`px-6 py-4 font-semibold tabular-nums ${changePct >= 0
-                            ? 'text-[#22C55E]'
-                            : 'text-[#EF4444]'
+                          ? 'text-[#22C55E]'
+                          : 'text-[#EF4444]'
                           }`}
                       >
 
