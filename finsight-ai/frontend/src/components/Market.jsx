@@ -38,7 +38,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function Market() {
-  const [indexData, setIndexData] = useState({ value: 0, change: 0, change_pct: 0 });
+  const [indexData, setIndexData] = useState({ value: null, change: null, change_pct: null });
   const [stocks, setStocks] = useState([]);
   const [sentiment, setSentiment] = useState({ overall_score: 0, overall_label: 'NEUTRAL', sources: {} });
   const [chartData, setChartData] = useState([]);
@@ -59,13 +59,15 @@ export default function Market() {
       ]);
 
       if (niftyRes.status === 'fulfilled' && niftyRes.value) {
-        if (niftyRes.value.status === 'error') {
-          setError(niftyRes.value.error);
-        } else {
-          if (niftyRes.value.index) setIndexData(niftyRes.value.index);
-          if (niftyRes.value.stocks && niftyRes.value.stocks.length > 0) {
-            setStocks(niftyRes.value.stocks);
-          }
+        const idx = niftyRes.value.index;
+        if (idx && (idx.status === 'error' || idx.status === 'unavailable' || idx.value == null)) {
+          setIndexData({ value: null, change: null, change_pct: null });
+          setError(idx.error || 'NIFTY 50 data is unavailable.');
+        } else if (idx) {
+          setIndexData(idx);
+        }
+        if (niftyRes.value.stocks && niftyRes.value.stocks.length > 0) {
+          setStocks(niftyRes.value.stocks);
         }
       } else if (niftyRes.status === 'rejected') {
         console.error("Nifty 50 API error", niftyRes.reason);
@@ -152,7 +154,7 @@ export default function Market() {
           <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#6B7280]">NIFTY 50</span>
           <div className="flex items-end justify-between mt-1">
             <span className="text-[28px] font-bold tabular-nums text-[#111111] leading-none">
-              ₹{niftyValue.toLocaleString()}
+              {indexData.value == null ? 'Unavailable' : `₹${niftyValue.toLocaleString()}`}
             </span>
             <div className={`flex items-center gap-0.5 px-2 py-1 rounded-[6px] ${
               isPositive ? 'bg-[#22C55E]/10 text-[#22C55E]' : 'bg-[#EF4444]/10 text-[#EF4444]'
