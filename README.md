@@ -39,7 +39,7 @@ With 130M+ SEBI-registered retail investors in India, there is a significant lac
 
 - **Frontend:** React.js, TailwindCSS, Recharts
 - **Backend:** FastAPI (Python, async)
-- **LLM:** Google Gemini 1.5 Flash
+- **LLM:** Google Gemini 3.6 Flash
 - **Embeddings:** Gemini text-embedding-004
 - **Vector DB:** ChromaDB
 - **Database:** SQLite (dev) → Supabase (prod)
@@ -153,7 +153,6 @@ finsight-ai/
 | Achuta Rao M | 1DB23CS004 | Backend & Data |
 | Shreejal Dash | 1DB23CS201 | Frontend & UI |
 | Kishan Kumar | 1DB23CS103 | ML & RAG Pipeline |
-
 
 
 ## 📚 References
