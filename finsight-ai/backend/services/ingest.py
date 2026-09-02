@@ -107,63 +107,64 @@ async def ingest_file(file_path: Path, chunk_size: int = 500, overlap: int = 50)
 
     Returns dict: {filename, chunks_count, status, error}
     """
-    from services.rag import get_collection
-    from services.gemini import get_embeddings_batch
+    from services.rag import ingest_document, ingest_pdf
 
     filename = file_path.name
     doc_id = file_path.stem
 
-    # Read file content
-    if file_path.suffix.lower() == ".pdf":
-        text = read_pdf(file_path)
-    elif file_path.suffix.lower() == ".txt":
-        text = read_txt(file_path)
-    else:
-        return {"filename": filename, "chunks_count": 0, "status": "skipped", "error": f"Unsupported file type: {file_path.suffix}"}
-
-    if not text or not text.strip():
-        return {"filename": filename, "chunks_count": 0, "status": "failed", "error": "No text extracted"}
-
-    # Chunk the text
-    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
-    if not chunks:
-        return {"filename": filename, "chunks_count": 0, "status": "failed", "error": "Chunking produced no output"}
-
-    logger.info(f"📄 {filename}: {len(text)} chars → {len(chunks)} chunks")
-
-    # Generate embeddings
     try:
-        embeddings = await get_embeddings_batch(chunks)
+        if file_path.suffix.lower() == ".pdf":
+            chunks = await ingest_pdf(str(file_path), doc_id=doc_id)
+        elif file_path.suffix.lower() == ".txt":
+            text = read_txt(file_path)
+            if not text or not text.strip():
+                return {
+                    "filename": filename,
+                    "chunks_count": 0,
+                    "status": "failed",
+                    "error": "No text extracted",
+                }
+            chunks = await ingest_document(
+                doc_id,
+                text,
+                metadata={
+                    "source": "file",
+                    "filename": filename,
+                    "file_path": str(file_path),
+                },
+                chunk_size=chunk_size,
+                chunk_overlap=overlap,
+            )
+        else:
+            return {
+                "filename": filename,
+                "chunks_count": 0,
+                "status": "skipped",
+                "error": f"Unsupported file type: {file_path.suffix}",
+            }
     except Exception as e:
-        return {"filename": filename, "chunks_count": 0, "status": "failed", "error": f"Embedding error: {e}"}
-
-    # Prepare IDs and metadata
-    timestamp = datetime.now().isoformat()
-    ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
-    metadatas = [
-        {
-            "doc_id": doc_id,
-            "source_filename": filename,
-            "chunk_index": i,
-            "total_chunks": len(chunks),
-            "ingested_at": timestamp,
+        return {
+            "filename": filename,
+            "chunks_count": 0,
+            "status": "failed",
+            "error": str(e),
         }
-        for i in range(len(chunks))
-    ]
 
-    # Store in ChromaDB
-    try:
-        collection = get_collection()
-        collection.upsert(
-            ids=ids,
-            documents=chunks,
-            embeddings=embeddings if all(embeddings) else None,
-            metadatas=metadatas,
-        )
-    except Exception as e:
-        return {"filename": filename, "chunks_count": 0, "status": "failed", "error": f"ChromaDB error: {e}"}
+    if not chunks:
+        return {
+            "filename": filename,
+            "chunks_count": 0,
+            "status": "failed",
+            "error": "No chunks ingested",
+        }
 
-    return {"filename": filename, "chunks_count": len(chunks), "status": "success", "error": None}
+    logger.info(f"📄 {filename}: {chunks} chunks ingested")
+    return {
+        "filename": filename,
+        "chunks_count": chunks,
+        "status": "success",
+        "error": None,
+    }
 
 
 async def ingest_path(path: str, chunk_size: int = 500, overlap: int = 50) -> dict:
@@ -248,9 +249,9 @@ def main():
     )
     args = parser.parse_args()
 
-    # Load .env for API keys
+    # Load backend/.env for API keys
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=True)
 
     logger.info("═" * 50)
     logger.info("FinSight AI — Document Ingestion Pipeline")

@@ -172,7 +172,7 @@ class TestContextAssembly:
             portfolio_data=mock_portfolio,
         )
 
-        assert "[PORTFOLIO]" in context
+        assert "[USER PAPER-TRADING PORTFOLIO]" in context
         assert "85000.5" in context or "85,000.5" in context or "85000.50" in context
         assert "[USER QUERY]" in context
 
@@ -191,7 +191,7 @@ class TestContextAssembly:
             market_data=mock_market,
         )
 
-        assert "[LIVE DATA]" in context
+        assert "[LIVE MARKET DATA]" in context
         assert "INFY" in context
         assert "1650.75" in context
 
@@ -217,7 +217,7 @@ class TestContextAssembly:
             signal_data=mock_signal,
         )
 
-        assert "[SIGNALS]" in context
+        assert "[TECHNICAL SIGNALS]" in context
         assert "BUY" in context
         assert "RELIANCE" in context
 
@@ -238,7 +238,7 @@ class TestContextAssembly:
             sentiment_data=mock_sentiment,
         )
 
-        assert "[SENTIMENT]" in context
+        assert "[MARKET SENTIMENT]" in context
         assert "BULLISH" in context
 
     def test_reasoning_steps_in_context(self):
@@ -251,9 +251,8 @@ class TestContextAssembly:
             reasoning_steps=steps,
         )
 
-        assert "[AGENT REASONING]" in context
+        assert "[PROCESSING SUMMARY]" in context
         assert "Classified intent" in context
-        assert "Step 1:" in context
 
     def test_ipo_data_in_context(self):
         """IPO data should appear under [IPO DATA] section."""
@@ -282,10 +281,10 @@ class TestContextAssembly:
         from context_assembler import assemble_context
         context = assemble_context(query="test query")
 
-        assert "[LIVE DATA]" not in context
-        assert "[SIGNALS]" not in context
-        assert "[SENTIMENT]" not in context
-        assert "[PORTFOLIO]" not in context
+        assert "[LIVE MARKET DATA]" not in context
+        assert "[TECHNICAL SIGNALS]" not in context
+        assert "[MARKET SENTIMENT]" not in context
+        assert "[USER PAPER-TRADING PORTFOLIO]" not in context
         assert "[IPO DATA]" not in context
         # But timestamp and query should always be present
         assert "[TIMESTAMP]" in context

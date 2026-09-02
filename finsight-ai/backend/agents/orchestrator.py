@@ -321,14 +321,24 @@ async def orchestrate_streaming(
                 context_data["sentiment_data"] = sentiment
 
         elif intent_type == "market_sentiment":
-            yield {"type": "step", "content": "Analyzing market sentiment..."}
+            yield {"type": "step", "content": "Analyzing market sentiment from ET and Moneycontrol..."}
             sentiment = await _tool_get_sentiment()
             context_data["sentiment_data"] = sentiment
+
+            yield {"type": "step", "content": "Fetching NIFTY 50 index..."}
+            nifty = await _tool_get_nifty()
+            context_data["market_data"] = nifty
+            yield {"type": "data", "content": {"nifty": nifty}}
 
         elif intent_type == "ipo_info":
             yield {"type": "step", "content": "Fetching IPO data..."}
             ipo = await _tool_get_ipo()
-            context_data["ipo_data"] = ipo
+            context_data["ipo_data"] = ipo if ipo is not None else []
+
+        elif intent_type == "sip_advice":
+            yield {"type": "step", "content": "Analyzing market conditions for SIP advice..."}
+            sentiment = await _tool_get_sentiment()
+            context_data["sentiment_data"] = sentiment
 
         elif intent_type == "paper_trade":
             yield {"type": "step", "content": "Parsing trade details..."}
@@ -396,19 +406,41 @@ async def orchestrate_streaming(
         # Step 3: Assemble context
         yield {"type": "step", "content": "Assembling context..."}
         from context_assembler import assemble_context
-        context = assemble_context(query=query, reasoning_steps=reasoning_steps, **context_data)
+        context = assemble_context(
+            query=query,
+            reasoning_steps=reasoning_steps,
+            **context_data,
+        )
 
-        # Step 4: Stream response
+        # Step 4: Stream Gemini response
         yield {"type": "step", "content": "Generating response..."}
+
         from services.gemini import generate_streaming_response
-        async for chunk in generate_streaming_response(query, context=context):
+
+        final_response = ""
+        async for chunk in generate_streaming_response(
+            query,
+            context=context,
+        ):
+            if not chunk:
+                continue
+            final_response += chunk
             yield {"type": "chunk", "content": chunk}
+
+        if not final_response.strip():
+            raise RuntimeError(
+                "Gemini produced no response text for this query."
+            )
 
         yield {"type": "done", "content": ""}
 
-    except Exception as e:
-        logger.error(f"Orchestration error: {e}")
-        yield {"type": "error", "content": str(e)}
+    except Exception as exc:
+        logger.exception(f"Orchestrator streaming failed: {exc}")
+        yield {
+            "type": "error",
+            "content": f"{type(exc).__name__}: {exc}",
+        }
+        yield {"type": "done", "content": ""}
 
 
 # ── Tool wrapper functions ───────────────────────────────────

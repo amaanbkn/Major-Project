@@ -1,125 +1,158 @@
 import json
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
+
 from dependencies import get_current_user
+
 
 router = APIRouter()
 
 
 class ChatRequest(BaseModel):
-    """Chat request schema."""
     message: str
     user_id: str = "default"
     stream: bool = True
 
 
 class ChatResponse(BaseModel):
-    """Non-streaming chat response schema."""
     response: str
     reasoning_steps: list[str]
     intent: dict
     timestamp: str
 
 
-@router.post("/chat")
-async def chat(request: ChatRequest, current_user: str = Depends(get_current_user)):
-    """
-    Main chat endpoint. Supports streaming (SSE) and non-streaming mode.
-    """
-    if not request.message.strip():
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
+def _sse(event: dict) -> str:
+    return (
+        f"data: "
+        f"{json.dumps(event, ensure_ascii=False)}"
+        f"\n\n"
+    )
 
-    logger.info(f"💬 Chat request from {current_user}: {request.message[:80]}")
+
+@router.post("/chat")
+async def chat(
+    request: ChatRequest,
+    current_user: str = Depends(
+        get_current_user
+    ),
+):
+
+    if not request.message.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty.",
+        )
+
+    logger.info(
+        f"💬 Chat request from {current_user}: "
+        f"{request.message[:80]}"
+    )
+
+    # ========================================================
+    # STREAMING
+    # ========================================================
 
     if request.stream:
-        async def stream():
-            from agents.orchestrator import orchestrate_streaming
 
-            async for event in orchestrate_streaming(
-                query=request.message,
-                user_id=current_user,
-            ):
-                yield f"data: {json.dumps(event)}\n\n"
+        async def event_stream():
+
+            try:
+                from agents.orchestrator import (
+                    orchestrate_streaming,
+                )
+
+                # Send an immediate event so the frontend
+                # knows the connection is alive.
+                yield _sse({
+                    "type": "step",
+                    "content": "Starting FinSight AI...",
+                })
+
+                async for event in (
+                    orchestrate_streaming(
+                        query=request.message,
+                        user_id=current_user,
+                    )
+                ):
+
+                    if not isinstance(
+                        event,
+                        dict,
+                    ):
+                        continue
+
+                    yield _sse(event)
+
+            except Exception as exc:
+
+                logger.exception(
+                    f"❌ Streaming chat failed: {exc}"
+                )
+
+                yield _sse({
+                    "type": "error",
+                    "content": (
+                        f"{type(exc).__name__}: "
+                        f"{str(exc)}"
+                    ),
+                })
+
+                yield _sse({
+                    "type": "done",
+                    "content": "",
+                })
+
+            finally:
+                logger.info(
+                    "🏁 Chat stream closed."
+                )
 
         return StreamingResponse(
-            stream(),
+            event_stream(),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache",
+                "Cache-Control": (
+                    "no-cache, no-transform"
+                ),
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
             },
         )
-    else:
-        # Non-streaming mode
-        from agents.orchestrator import orchestrate
 
-        result = await orchestrate(request.message, current_user)
+    # ========================================================
+    # NON-STREAMING
+    # ========================================================
+
+    try:
+
+        from agents.orchestrator import (
+            orchestrate,
+        )
+
+        result = await orchestrate(
+            request.message,
+            current_user,
+        )
+
         return ChatResponse(
             response=result.response,
             reasoning_steps=result.reasoning_steps,
             intent=result.intent,
-            timestamp=result.to_dict()["timestamp"],
+            timestamp=result.to_dict()[
+                "timestamp"
+            ],
         )
 
+    except Exception as exc:
 
-async def _stream_response(message: str, user_id: str):
-    """
-    Generator for Server-Sent Events (SSE) streaming.
-    Yields formatted SSE events from the orchestrator.
-    """
-    from agents.orchestrator import orchestrate_streaming
+        logger.exception(
+            f"❌ Non-streaming chat failed: {exc}"
+        )
 
-    try:
-        async for event in orchestrate_streaming(message, user_id):
-            event_type = event.get("type", "chunk")
-            content = event.get("content", "")
-
-            # Format as SSE
-            if isinstance(content, dict):
-                data = json.dumps({"type": event_type, "content": content})
-            else:
-                data = json.dumps({"type": event_type, "content": str(content)})
-
-            yield f"data: {data}\n\n"
-
-        # Send done event
-        yield f"data: {json.dumps({'type': 'done', 'content': ''})}\n\n"
-
-    except Exception as e:
-        logger.error(f"Streaming error: {e}")
-        error_data = json.dumps({"type": "error", "content": str(e)})
-        yield f"data: {error_data}\n\n"
-
-
-@router.get("/chat/history")
-async def get_chat_history(limit: int = 50, current_user: str = Depends(get_current_user)):
-    """Get chat history for a user."""
-    import sqlite3
-    import os
-
-    db_path = os.getenv("SQLITE_DB_PATH", "./finsight.db")
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT role, content, timestamp FROM chat_history WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?",
-            (current_user, limit),
-        ).fetchall()
-        conn.close()
-
-        return {
-            "user_id": current_user,
-            "messages": [
-                {"role": r["role"], "content": r["content"], "timestamp": r["timestamp"]}
-                for r in reversed(rows)
-            ],
-        }
-    except Exception as e:
-        logger.error(f"Chat history error: {e}")
-        return {"user_id": current_user, "messages": []}
-
+        raise HTTPException(
+            status_code=500,
+            detail=f"{type(exc).__name__}: {exc}",
+        )

@@ -8,14 +8,15 @@ Team: Amaan Siddiqui, Achuta Rao M, Shreejal Dash, Kishan Kumar
 import os
 import sqlite3
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-# Load environment variables
-load_dotenv()
+BACKEND_DIR = Path(__file__).resolve().parent
+load_dotenv(BACKEND_DIR / ".env", override=True)
 
 # ── Lifespan: startup & shutdown events ──────────────────────
 @asynccontextmanager
@@ -41,6 +42,8 @@ async def lifespan(app: FastAPI):
 def _init_sqlite():
     """Create paper-trading tables if they don't exist."""
     db_path = os.getenv("SQLITE_DB_PATH", "./finsight.db")
+    if not Path(db_path).is_absolute():
+        db_path = str(BACKEND_DIR / db_path)
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -107,17 +110,26 @@ app = FastAPI(
 )
 
 # ── CORS Middleware ──────────────────────────────────────────
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5174")
+frontend_url = (os.getenv("FRONTEND_URL", "http://localhost:5174") or "").rstrip("/")
+environment = os.getenv("ENVIRONMENT", "development").lower()
+
+allowed_origins = {
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+}
+if frontend_url:
+    allowed_origins.add(frontend_url)
+
+if environment == "production":
+    allowed_origins = {origin for origin in allowed_origins if origin}
+    if frontend_url:
+        allowed_origins.add(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        frontend_url,
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://localhost:3000",
-    ],
+    allow_origins=sorted(allowed_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -158,12 +170,20 @@ async def health_check():
 @app.get("/api/health", tags=["Health"])
 async def api_health():
     """API health endpoint with component status."""
+    gemini_status = "missing_key"
+    try:
+        from services.gemini import get_gemini_status
+        status = get_gemini_status()
+        gemini_status = "configured" if status.get("configured") else "missing_key"
+    except Exception:
+        gemini_status = "error"
+
     return {
         "status": "healthy",
         "components": {
             "fastapi": "running",
             "sqlite": "connected",
-            "gemini": "configured" if os.getenv("GEMINI_API_KEY") else "missing_key",
+            "gemini": gemini_status,
             "scheduler": "active",
         },
     }
@@ -171,6 +191,7 @@ async def api_health():
 
 # ── Run with Uvicorn ─────────────────────────────────────────
 if __name__ == "__main__":
+    # pyrefly: ignore [missing-import]
     import uvicorn
 
     uvicorn.run(
